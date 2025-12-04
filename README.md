@@ -58,7 +58,7 @@ Found nodes:
   pi-worker2
   pi-worker3
 
-Enter SSH username: brian
+Enter SSH username: <user_name>
 Enter SSH password: 
 === Phase 0: Distribute /etc/hosts entries to all nodes ===
 Updating /etc/hosts on pi-master...
