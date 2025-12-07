@@ -7,6 +7,7 @@ A collection of utility scripts for various system administration and automation
 | Script | Description | Documentation |
 |--------|-------------|---------------|
 | Cluster SSH Key Setup | Automates SSH key distribution across a cluster of nodes | [README](./cluster-ssh-key-setup/README.md) |
+| Cluster System Update | Runs apt update/upgrade in parallel across cluster nodes | [README](./cluster-system-update/README.md) |
 
 ## Quick Start
 
@@ -54,4 +55,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Author
 
-Brian Fritzinger - [JBIK Security Solutions, LLC](https://github.com/bfritzinger)
+[Brian Fritzinger](https://github.com/bfritzinger)
