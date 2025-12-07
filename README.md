@@ -36,6 +36,9 @@ Misc_Scripts/
 └── cluster-ssh-key-setup/
     ├── README.md
     └── cluster_sshKey_setup.sh
+└── cluster-system-update/
+    ├── README.md
+    └── update_sys.sh
 ```
 
 ## Adding New Scripts
