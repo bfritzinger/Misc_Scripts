@@ -63,4 +63,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Author
 
-Brian Fritzinger - [JBIK Security Solutions, LLC](https://github.com/bfritzinger)
+[Brian Fritzinger](https://github.com/bfritzinger)
