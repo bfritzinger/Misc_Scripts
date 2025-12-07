@@ -60,31 +60,61 @@ Found nodes:
 
 Enter SSH username: <USER_NAME>
 Enter SSH password: 
+
 === Phase 0: Distribute /etc/hosts entries to all nodes ===
 Updating /etc/hosts on master...
 Updating /etc/hosts on worker1...
 ...
-=== Phase 5: Testing mesh connectivity ===
-pi-master -> master: OK
-pi-master -> worker1: OK
+
+=== Phase 3: Distribute keys to all nodes (with duplicate check) ===
+Distributing keys to master...
+  Key already exists, skipping
+  Added new key
 ...
+
+=== Phase 5: Testing mesh connectivity ===
+master -> master: OK
+master -> worker1: OK
+...
+
 === Done ===
+All connections successful!
 ```
+
+## Duplicate Handling
+
+The script is designed to be **idempotent** - it can be safely run multiple times without creating duplicate entries:
+
+| File | Duplicate Prevention Method |
+|------|----------------------------|
+| `/etc/hosts` | Removes all existing subnet entries before adding fresh ones |
+| `~/.ssh/id_rsa` | Only generates a new key if one doesn't already exist |
+| `~/.ssh/authorized_keys` | Checks if each key already exists before adding; runs `sort -u` as final cleanup |
+| `~/.ssh/known_hosts` | Uses `ssh-keygen -F` to check if host entry exists; runs `sort -u` as final cleanup |
+
+### Re-running the Script
+
+You can safely re-run the script to:
+- Add new nodes to an existing cluster
+- Refresh host entries after IP changes
+- Repair broken SSH configurations
+- Onboard replacement nodes
 
 ## Notes
 
-- The script backs up `/etc/hosts` on each node before modifying it
+- The script backs up `/etc/hosts` on each node before modifying it (`/etc/hosts.bak`)
 - SSH keys are only generated if they don't already exist
-- The `authorized_keys` file is deduplicated after adding keys
-- Existing subnet entries in `/etc/hosts` are replaced to avoid duplicates
+- Temporary files are cleaned up automatically on exit
+- The script uses `set -e` to exit on errors
 
 ## Security Considerations
 
-- This script is intended for closed/private environments
+- This script is intended for closed/private environments (home labs, dev clusters)
 - Password is stored in memory only during script execution
 - After running, all nodes use key-based authentication
 - Consider disabling password authentication after setup:
   ```bash
+  # Run on each node or distribute via the script
   sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
   sudo systemctl restart sshd
   ```
@@ -103,6 +133,14 @@ pi-master -> worker1: OK
 - Check network connectivity between nodes
 - Verify SSH service is running: `sudo systemctl status sshd`
 
+**"Key already exists" for all keys:**
+- This is normal when re-running the script - it means deduplication is working
+
+**Duplicate entries still appearing:**
+- Run manual cleanup: `sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys`
+- For known_hosts: `sort -u ~/.ssh/known_hosts -o ~/.ssh/known_hosts`
+
 ## Changelog
 
+- **v1.1** - Added robust duplicate detection for `authorized_keys` and `known_hosts`; improved cleanup handling; added connection test summary
 - **v1.0** - Initial release
