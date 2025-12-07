@@ -8,6 +8,7 @@ A collection of utility scripts for various system administration and automation
 |--------|-------------|---------------|
 | Cluster SSH Key Setup | Automates SSH key distribution across a cluster of nodes | [README](./cluster-ssh-key-setup/README.md) |
 | Cluster System Update | Runs apt update/upgrade in parallel across cluster nodes | [README](./cluster-system-update/README.md) |
+| Docker Image Update | Automates the process of updating a running Docker container | [README](./docker_container_update/README.md) |
 
 ## Quick Start
 
@@ -33,12 +34,16 @@ Misc_Scripts/
 ├── LICENSE
 ├── _template/
 │   └── README.md
-└── cluster-ssh-key-setup/
-    ├── README.md
-    └── cluster_sshKey_setup.sh
+├── cluster-ssh-key-setup/
+│   ├── README.md
+│   └── cluster_sshKey_setup.sh
 └── cluster-system-update/
     ├── README.md
     └── update_sys.sh
+└── docker_container_update/
+    ├── README.md
+    └── docker_container_update.sh
+
 ```
 
 ## Adding New Scripts
@@ -58,4 +63,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Author
 
-[Brian Fritzinger](https://github.com/bfritzinger)
+Brian Fritzinger - [JBIK Security Solutions, LLC](https://github.com/bfritzinger)
