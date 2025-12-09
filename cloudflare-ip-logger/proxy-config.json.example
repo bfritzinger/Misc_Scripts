@@ -1,0 +1,15 @@
+[
+  {
+    "host": "grafana.example.net",
+    "backend": "http://10.0.0.214:30300"
+  },
+  {
+    "host": "webtop.example.net",
+    "backend": "https://10.0.0.155:6901",
+    "no_tls_verify": true
+  },
+  {
+    "host": "sshwifty.example.net",
+    "backend": "http://10.0.0.155:8182"
+  }
+]

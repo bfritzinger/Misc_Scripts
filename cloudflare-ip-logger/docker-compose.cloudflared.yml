@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # Dashboard and API
+  cf-ip-logger:
+    build: .
+    container_name: cf-ip-logger
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/cf-ip-logger:/data
+    environment:
+      - DATA_DIR=/data
+      - PORT=8080
+      - TZ=America/New_York
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cloudflared tunnel - writes logs to file
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    # Output JSON logs to file via shell redirection
+    entrypoint: /bin/sh
+    command: >
+      -c "cloudflared tunnel --config /etc/cloudflared/config.yml --loglevel info run 2>&1 | tee -a /data/cloudflared.log"
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+      - ./data/cf-ip-logger:/data
+    environment:
+      - TZ=America/New_York
+    network_mode: host
+
+  # Log parser - tails cloudflared log file and inserts into database  
+  log-parser:
+    build: .
+    container_name: cf-log-parser
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command: >
+      -c "tail -F /data/cloudflared.log 2>/dev/null | /app/cf-log-parser -db /data/connections.db -verbose"
+    volumes:
+      - ./data/cf-ip-logger:/data
+    environment:
+      - TZ=America/New_York
+    depends_on:
+      - cf-ip-logger
+      - cloudflared
+

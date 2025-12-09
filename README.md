@@ -8,7 +8,8 @@ A collection of utility scripts for various system administration and automation
 |--------|-------------|---------------|
 | Cluster SSH Key Setup | Automates SSH key distribution across a cluster of nodes | [README](./cluster-ssh-key-setup/README.md) |
 | Cluster System Update | Runs apt update/upgrade in parallel across cluster nodes | [README](./cluster-system-update/README.md) |
-| Docker Image Update | Automates the process of updating a running Docker container | [README](./docker_container_update/README.md) |
+| Docker Image Update | Automates the process of updating a running Docker container | [README](./docker-container-update/README.md) |
+| Cloudflare IP Logger | A reverse proxy that logs visitor IPs from Cloudflare Tunnel traffic | [README](./cloudflare_ip_logger/README.md)|
 
 ## Quick Start
 
@@ -36,13 +37,28 @@ Misc_Scripts/
 │   └── README.md
 ├── cluster-ssh-key-setup/
 │   ├── README.md
-│   └── cluster_sshKey_setup.sh
+│   └── cluster-sshKey-setup.sh
 └── cluster-system-update/
     ├── README.md
-    └── update_sys.sh
-└── docker_container_update/
+    └── update-sys.sh
+└── docker-container-update/
     ├── README.md
-    └── docker_container_update.sh
+    └── docker-container-update.sh
+└── cloudflare-ip-logger/
+    ├── cmd
+        ├── logparser
+            ├── main.go
+    ├── README.md
+    └── cd-log-parser.service
+    └── docker-compose.cloudflared.yml
+    └── docker-compose.yml
+    └── Dokerfile
+    └── go.mod
+    └── main.go
+    └── proxy-config.json.example
+    └── run-with-logging.sh
+    
+
 
 ```
 

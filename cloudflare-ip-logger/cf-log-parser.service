@@ -1,0 +1,22 @@
+# If you already have cloudflared running as a systemd service,
+# you can add this service to parse its logs.
+#
+# 1. Copy cf-log-parser binary to /usr/local/bin/
+# 2. Copy this file to /etc/systemd/system/cf-log-parser.service
+# 3. sudo systemctl daemon-reload
+# 4. sudo systemctl enable --now cf-log-parser
+
+[Unit]
+Description=Cloudflared Log Parser
+After=cloudflared.service
+Requires=cloudflared.service
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c "journalctl -u cloudflared -f -o cat | /usr/local/bin/cf-log-parser -db /path/to/data/connections.db -verbose"
+Restart=always
+RestartSec=5
+Environment=TZ=America/New_York
+
+[Install]
+WantedBy=multi-user.target
