@@ -100,7 +100,7 @@ do_fetch() {
     
     if [ "$auto_mode" = true ]; then
         echo "   Pulling from $DEFAULT_BRANCH..."
-        git pull origin "$DEFAULT_BRANCH" 2>/dev/null || echo "   ⚠️  Pull failed or nothing to pull"
+        git pull --rebase origin "$DEFAULT_BRANCH" 2>/dev/null || echo "   ⚠️  Pull failed or nothing to pull"
     else
         echo ""
         echo "Remote branches:"
@@ -108,12 +108,44 @@ do_fetch() {
         echo ""
         read -p "Pull changes from $DEFAULT_BRANCH? (y/n): " pull_confirm
         if [[ "$pull_confirm" =~ ^[Yy]$ ]]; then
-            git pull origin "$DEFAULT_BRANCH"
+            git pull --rebase origin "$DEFAULT_BRANCH"
         fi
     fi
     cd ..
     
     echo "✅ Fetch complete for $repo_name"
+}
+
+# Sync with remote before push (pull --rebase)
+sync_before_push() {
+    local remote_name=${1:-origin}
+    
+    echo "🔄 Syncing with remote before push..."
+    git fetch "$remote_name" "$DEFAULT_BRANCH" 2>/dev/null
+    
+    # Check if we're behind
+    LOCAL=$(git rev-parse HEAD 2>/dev/null)
+    REMOTE=$(git rev-parse "$remote_name/$DEFAULT_BRANCH" 2>/dev/null)
+    BASE=$(git merge-base HEAD "$remote_name/$DEFAULT_BRANCH" 2>/dev/null)
+    
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo "   Already up to date."
+    elif [ "$LOCAL" = "$BASE" ]; then
+        echo "   Local is behind remote, pulling..."
+        git pull --rebase "$remote_name" "$DEFAULT_BRANCH"
+    elif [ "$REMOTE" = "$BASE" ]; then
+        echo "   Local is ahead, ready to push."
+    else
+        echo "   Branches have diverged, attempting rebase..."
+        git pull --rebase "$remote_name" "$DEFAULT_BRANCH"
+        if [ $? -ne 0 ]; then
+            echo "   ⚠️  Rebase conflict detected!"
+            echo "   Aborting rebase..."
+            git rebase --abort 2>/dev/null
+            return 1
+        fi
+    fi
+    return 0
 }
 
 # Push to a repository
@@ -141,7 +173,8 @@ do_push() {
     if [ -z "$(git status --porcelain)" ]; then
         echo "No changes to commit."
         if [ "$auto_mode" = true ]; then
-            echo "   Pushing any existing commits..."
+            echo "   Syncing and pushing any existing commits..."
+            sync_before_push "origin"
             git push origin "$DEFAULT_BRANCH" 2>/dev/null
             cd ..
             return 0
@@ -175,14 +208,42 @@ do_push() {
         fi
     fi
     
+    # Sync before push
+    if ! sync_before_push "origin"; then
+        echo "❌ Sync failed - manual intervention required"
+        cd ..
+        return 1
+    fi
+    
     # Push
-    echo "📤 Pushing to origin ($repo_url)..."
+    echo "📤 Pushing to origin..."
     git push origin "$DEFAULT_BRANCH"
     
     if [ $? -eq 0 ]; then
         echo "✅ Successfully pushed to $repo_name"
     else
+        echo ""
         echo "❌ Push failed for $repo_name"
+        if [ "$auto_mode" = false ]; then
+            echo ""
+            echo "Options:"
+            echo "  1) Force push (overwrites remote - DANGEROUS)"
+            echo "  2) Skip this repo"
+            read -p "Select option (1-2): " retry_opt
+            case $retry_opt in
+                1)
+                    read -p "⚠️  Are you sure? This will overwrite remote! (yes/no): " force_confirm
+                    if [ "$force_confirm" = "yes" ]; then
+                        git push --force origin "$DEFAULT_BRANCH"
+                        if [ $? -eq 0 ]; then
+                            echo "✅ Force push successful"
+                        else
+                            echo "❌ Force push also failed"
+                        fi
+                    fi
+                    ;;
+            esac
+        fi
     fi
     
     cd ..
@@ -251,15 +312,29 @@ do_push_both() {
     git remote add github "$github_url" 2>/dev/null
     git remote add gitlab "$gitlab_url" 2>/dev/null
     
+    # Sync and push to GitHub
     echo ""
     echo "📤 Pushing to GitHub..."
-    git push github "$DEFAULT_BRANCH"
-    github_result=$?
+    if sync_before_push "github"; then
+        git push github "$DEFAULT_BRANCH"
+        github_result=$?
+    else
+        echo "   ⚠️  Sync with GitHub failed, attempting push anyway..."
+        git push github "$DEFAULT_BRANCH"
+        github_result=$?
+    fi
     
+    # Sync and push to GitLab
     echo ""
     echo "📤 Pushing to GitLab..."
-    git push gitlab "$DEFAULT_BRANCH"
-    gitlab_result=$?
+    if sync_before_push "gitlab"; then
+        git push gitlab "$DEFAULT_BRANCH"
+        gitlab_result=$?
+    else
+        echo "   ⚠️  Sync with GitLab failed, attempting push anyway..."
+        git push gitlab "$DEFAULT_BRANCH"
+        gitlab_result=$?
+    fi
     
     echo ""
     if [ $github_result -eq 0 ] && [ $gitlab_result -eq 0 ]; then

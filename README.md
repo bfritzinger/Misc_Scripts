@@ -10,7 +10,7 @@ A collection of utility scripts for various system administration and automation
 | Cluster System Update | Runs apt update/upgrade in parallel across cluster nodes | [README](./cluster-system-update/README.md) |
 | Docker Image Update | Automates the process of updating a running Docker container | [README](./docker-container-update/README.md) |
 | Cloudflare IP Logger | A reverse proxy that logs visitor IPs from Cloudflare Tunnel traffic | [README](./cloudflare_ip_logger/README.md) |
-| Ollama Model Updater | Checks for updates to available models on ollama.ai and installs them automatically | [README](./ollama_updater/README.md) |
+| Ollama Model Updater | Checks for updates to available models on ollama.ai and installs them automatically | [README](./ollama-updater/README.md) |
 | Git Update | A bash script to interactively manage Git repositories across GitHub and GitLab with clone, fetch, and push operations—individually or in batch.| [README](./git-update/README.md) |
 
 
@@ -60,7 +60,7 @@ Misc_Scripts/
     └── main.go
     └── proxy-config.json.example
     └── run-with-logging.sh
-└── ollama_updater/
+└── ollama-updater/
     ├── README.md
     └── ollama-updater.py
 └── git-update/
