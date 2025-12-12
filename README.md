@@ -12,7 +12,7 @@ A collection of utility scripts for various system administration and automation
 | Cloudflare IP Logger | A reverse proxy that logs visitor IPs from Cloudflare Tunnel traffic | [README](./cloudflare_ip_logger/README.md) |
 | Ollama Model Updater | Checks for updates to available models on ollama.ai and installs them automatically | [README](./ollama-updater/README.md) |
 | Git Update | A bash script to interactively manage Git repositories across GitHub and GitLab with clone, fetch, and push operations—individually or in batch.| [README](./git-update/README.md) |
-
+| Power & Temp Monitor | Monitor temperature, voltage, power, and throttling status on Raspberry Pi, Nvidia Jetson, and x86 systems using Prometheus and Alertmanager | [README](./pwr-tmp-monitor/README.md)
 
 ## Quick Start
 
@@ -66,6 +66,17 @@ Misc_Scripts/
 └── git-update/
     ├── README.md
     └── git-update.sh
+└── pwr-tmp-monitor/
+    ├── README.md
+    └── setup.sh
+    └── x86_metrics.sh
+    └── jetson_metrics.sh
+    └── pi_metrics.sh
+    └── deploy_to_nodes.sh
+    └── alertmananger.yml
+    └── pi_alerts.yml
+    └── grafana-dashboard.json
+    └── NODE_EXPORTER_SETUP.md
     
 
 
