@@ -11,6 +11,8 @@ A collection of utility scripts for various system administration and automation
 | Docker Image Update | Automates the process of updating a running Docker container | [README](./docker-container-update/README.md) |
 | Cloudflare IP Logger | A reverse proxy that logs visitor IPs from Cloudflare Tunnel traffic | [README](./cloudflare_ip_logger/README.md) |
 | Ollama Model Updater | Checks for updates to available models on ollama.ai and installs them automatically | [README](./ollama_updater/README.md) |
+| Git Update | A bash script to interactively manage Git repositories across GitHub and GitLab with clone, fetch, and push operations—individually or in batch.| [README](./git-update/README.md) |
+
 
 ## Quick Start
 
@@ -61,6 +63,9 @@ Misc_Scripts/
 └── ollama_updater/
     ├── README.md
     └── ollama-updater.py
+└── git-update/
+    ├── README.md
+    └── git-update.sh
     
 
 
