@@ -1,0 +1,88 @@
+groups:
+  - name: raspberry_pi_alerts
+    rules:
+      # Temperature Alerts
+      - alert: PiTemperatureWarning
+        expr: rpi_temperature_celsius > 65
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pi temperature warning on {{ $labels.host }}"
+          description: "Temperature is {{ $value }}°C (threshold: 65°C)"
+
+      - alert: PiTemperatureCritical
+        expr: rpi_temperature_celsius > 75
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pi temperature CRITICAL on {{ $labels.host }}"
+          description: "Temperature is {{ $value }}°C (threshold: 75°C) - throttling imminent!"
+
+      - alert: PiTemperatureEmergency
+        expr: rpi_temperature_celsius > 80
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pi temperature EMERGENCY on {{ $labels.host }}"
+          description: "Temperature is {{ $value }}°C - Pi is actively throttling!"
+
+      # Undervoltage Alerts
+      - alert: PiUndervoltageActive
+        expr: rpi_undervoltage_now == 1
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Undervoltage detected on {{ $labels.host }}"
+          description: "Pi is experiencing undervoltage NOW - check power supply!"
+
+      - alert: PiUndervoltageOccurred
+        expr: rpi_undervoltage_occurred == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Undervoltage has occurred on {{ $labels.host }}"
+          description: "Undervoltage detected since boot - power supply may be inadequate"
+
+      # Throttling Alerts
+      - alert: PiThrottlingActive
+        expr: rpi_throttled_now == 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pi {{ $labels.host }} is being throttled"
+          description: "CPU throttling active - likely due to temperature or power issues"
+
+      - alert: PiFrequencyCapped
+        expr: rpi_freq_capped_now == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pi {{ $labels.host }} frequency is capped"
+          description: "ARM frequency is being limited"
+
+      # Soft Temperature Limit
+      - alert: PiSoftTempLimitActive
+        expr: rpi_soft_temp_limit_now == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Soft temp limit active on {{ $labels.host }}"
+          description: "Pi has hit soft temperature limit and is reducing performance"
+
+      # Voltage too low (steady state)
+      - alert: PiLowVoltage
+        expr: rpi_voltage_volts < 1.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low voltage on {{ $labels.host }}"
+          description: "Core voltage is {{ $value }}V (expected ~1.2V)"

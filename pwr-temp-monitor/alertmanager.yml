@@ -1,0 +1,100 @@
+# Alertmanager Configuration
+# Update the receiver settings with your actual credentials/webhooks
+
+global:
+  # How long to wait before sending a notification again if it's still firing
+  resolve_timeout: 5m
+
+  # SMTP settings (for email notifications)
+  # smtp_smarthost: 'smtp.gmail.com:587'
+  # smtp_from: 'alertmanager@yourdomain.com'
+  # smtp_auth_username: 'your-email@gmail.com'
+  # smtp_auth_password: 'your-app-password'
+
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'host']
+  
+  # Wait this long before sending first notification for a group
+  group_wait: 30s
+  
+  # Wait this long before sending notifications about new alerts in a group
+  group_interval: 5m
+  
+  # Wait this long before re-sending a notification
+  repeat_interval: 4h
+
+  # Route critical alerts differently
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      repeat_interval: 1h
+      
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      repeat_interval: 4h
+
+receivers:
+  - name: 'default-receiver'
+    # Uncomment and configure your preferred method(s)
+    
+    # Discord webhook
+    # discord_configs:
+    #   - webhook_url: 'https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN'
+
+    # Slack
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    #     channel: '#alerts'
+
+    # Pushover (great for mobile notifications)
+    # pushover_configs:
+    #   - user_key: 'YOUR_USER_KEY'
+    #     token: 'YOUR_APP_TOKEN'
+
+    # Generic webhook (works with ntfy, Gotify, Home Assistant, etc.)
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook'  # Replace with your webhook URL
+        send_resolved: true
+
+  - name: 'critical-alerts'
+    # For critical alerts, you might want multiple notification methods
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook'
+        send_resolved: true
+    
+    # Uncomment for email on critical alerts
+    # email_configs:
+    #   - to: 'your-email@example.com'
+    #     send_resolved: true
+
+  - name: 'warning-alerts'
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook'
+        send_resolved: true
+
+# Inhibition rules - prevent notification floods
+inhibit_rules:
+  # If critical temp alert fires, suppress the warning
+  - source_match:
+      alertname: 'PiTemperatureCritical'
+    target_match:
+      alertname: 'PiTemperatureWarning'
+    equal: ['host']
+    
+  - source_match:
+      alertname: 'PiTemperatureEmergency'
+    target_match:
+      alertname: 'PiTemperatureCritical'
+    equal: ['host']
+    
+  - source_match:
+      alertname: 'PiTemperatureEmergency'
+    target_match:
+      alertname: 'PiTemperatureWarning'
+    equal: ['host']
