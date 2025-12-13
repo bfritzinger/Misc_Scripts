@@ -14,6 +14,7 @@ A collection of utility scripts for various system administration and automation
 | Git Update | A bash script to interactively manage Git repositories across GitHub and GitLab with clone, fetch, and push operations—individually or in batch.| [README](./git-update/README.md) |
 | Power & Temp Monitor | Monitor temperature, voltage, power, and throttling status on Raspberry Pi, Nvidia Jetson, and x86 systems using Prometheus and Alertmanager | [README](./pwr-temp-monitor/README.md) |
 | Alias Distribute | Distributes bash aliases to all nodes listed in /etc/hosts | [README](./alias-dist/README.md) |
+| Git Star Repo | A Python script that fetches all your GitHub starred repositories and generates a summary report with statistics and a full listing. | [README](./git-star-repo/README.md) | 
 
 ## Quick Start
 
@@ -81,6 +82,9 @@ Misc_Scripts/
 └── alias-dist/
     ├── README.md
     └── alias-dist.sh
+└── git-start-repo/
+    ├── README.md
+    └── github-stars.sh
     
 
 
