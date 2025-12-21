@@ -88,7 +88,7 @@ Misc_Scripts/
     ├── README.md
     └── github-stars.sh
 └── dotfiles/
-    ├── bootstrap.sh          # Main installer
+    ├── bootstrap.sh          
     ├── README.md
     ├── .bashrc
     ├── .bash_aliases
@@ -98,9 +98,9 @@ Misc_Scripts/
     ├── .gitconfig
     ├── .gitignore_global
     ├── .ssh/
-    │   └── config           # SSH host configurations
+    │   └── config           
     └── .config/
-        └── ...              # Application configs
+        └── ...              
     
 
 
