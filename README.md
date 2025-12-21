@@ -15,6 +15,8 @@ A collection of utility scripts for various system administration and automation
 | Power & Temp Monitor | Monitor temperature, voltage, power, and throttling status on Raspberry Pi, Nvidia Jetson, and x86 systems using Prometheus and Alertmanager | [README](./pwr-temp-monitor/README.md) |
 | Alias Distribute | Distributes bash aliases to all nodes listed in /etc/hosts | [README](./alias-dist/README.md) |
 | Git Star Repo | A Python script that fetches all your GitHub starred repositories and generates a summary report with statistics and a full listing. | [README](./github-star-repos/README.md) | 
+| Dot Files | Personal configuration files for setting up a new Linux system.| [README](./dotfiles/README.md) |
+
 
 ## Quick Start
 
@@ -85,6 +87,20 @@ Misc_Scripts/
 └── github-star-repos/
     ├── README.md
     └── github-stars.sh
+└── dotfiles/
+    ├── bootstrap.sh          # Main installer
+    ├── README.md
+    ├── .bashrc
+    ├── .bash_aliases
+    ├── .bash_profile
+    ├── .vimrc
+    ├── .tmux.conf
+    ├── .gitconfig
+    ├── .gitignore_global
+    ├── .ssh/
+    │   └── config           # SSH host configurations
+    └── .config/
+        └── ...              # Application configs
     
 
 
