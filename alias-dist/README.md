@@ -323,7 +323,7 @@ The script comes pre-loaded with 90+ aliases organized by category:
 | `moon` | `curl wttr.in/Moon` | Moon phase |
 | `sha` | `shasum -a 256` | SHA256 hash |
 | `genpass` | `openssl rand -base64 20` | Generate random password |
-| `busy` | `cat /dev/urandom \| hexdump -C \| grep 'ca fe'` | Fake hacker screen |
+| `busy` | `cat /dev/urandom \| hexdump -C \| grep 'ca fe'` | Fake hex dump (userful to keep remote sessions up) |
 
 ---
 
@@ -410,5 +410,6 @@ Feel free to add useful aliases! Keep them:
 MIT License - Use freely, modify as needed.
 
 ## Acknowledgments
+
 
 Built for managing home lab infrastructure, Raspberry Pi clusters, and keeping sanity across multiple Linux systems.
