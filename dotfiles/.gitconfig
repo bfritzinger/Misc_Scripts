@@ -1,0 +1,214 @@
+#===============================================================================
+# .gitconfig - Git Configuration
+#===============================================================================
+# NOTE: Update [user] section with your details!
+
+[user]
+    name = Your Name
+    email = your.email@example.com
+    # signingkey = YOUR_GPG_KEY_ID
+
+[init]
+    defaultBranch = main
+
+[core]
+    editor = vim
+    autocrlf = input
+    whitespace = trailing-space,space-before-tab
+    excludesfile = ~/.gitignore_global
+    pager = less -FRX
+
+[color]
+    ui = auto
+    branch = auto
+    diff = auto
+    status = auto
+
+[color "branch"]
+    current = yellow reverse
+    local = yellow
+    remote = green
+
+[color "diff"]
+    meta = yellow bold
+    frag = magenta bold
+    old = red bold
+    new = green bold
+
+[color "status"]
+    added = green
+    changed = yellow
+    untracked = cyan
+
+[diff]
+    tool = vimdiff
+    colorMoved = zebra
+
+[merge]
+    tool = vimdiff
+    conflictstyle = diff3
+
+[pull]
+    rebase = true
+
+[push]
+    default = current
+    autoSetupRemote = true
+
+[fetch]
+    prune = true
+
+[rebase]
+    autoStash = true
+
+[rerere]
+    enabled = true
+
+[help]
+    autocorrect = 10
+
+[credential]
+    helper = cache --timeout=3600
+
+#-------------------------------------------------------------------------------
+# Aliases
+#-------------------------------------------------------------------------------
+[alias]
+    # Status
+    s = status -sb
+    st = status
+
+    # Add
+    a = add
+    aa = add -A
+    ap = add -p
+
+    # Commit
+    c = commit
+    cm = commit -m
+    ca = commit --amend
+    can = commit --amend --no-edit
+    
+    # Checkout
+    co = checkout
+    cob = checkout -b
+    com = checkout main
+    cod = checkout develop
+
+    # Branch
+    b = branch
+    ba = branch -a
+    bd = branch -d
+    bD = branch -D
+    bm = branch -m
+
+    # Push/Pull
+    p = push
+    pf = push --force-with-lease
+    pl = pull
+    plr = pull --rebase
+
+    # Fetch
+    f = fetch
+    fa = fetch --all
+
+    # Merge/Rebase
+    m = merge
+    rb = rebase
+    rbi = rebase -i
+    rbc = rebase --continue
+    rba = rebase --abort
+
+    # Stash
+    stash-all = stash save --include-untracked
+    sl = stash list
+    sp = stash pop
+    ss = stash show -p
+
+    # Log
+    l = log --oneline -20
+    lg = log --oneline --graph --decorate
+    ll = log --pretty=format:'%C(yellow)%h%Creset %s %C(cyan)(%cr) %C(blue)<%an>%Creset' --abbrev-commit
+    lp = log -p
+    hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
+
+    # Diff
+    d = diff
+    ds = diff --staged
+    dc = diff --cached
+
+    # Show
+    sh = show
+    shs = show --stat
+
+    # Reset
+    unstage = reset HEAD --
+    undo = reset --soft HEAD~1
+    discard = checkout --
+
+    # Clean
+    clean-all = clean -fdx
+    pristine = !git reset --hard && git clean -fdx
+
+    # Remote
+    rv = remote -v
+    ra = remote add
+    rr = remote remove
+
+    # Tag
+    t = tag
+    tl = tag -l
+    td = tag -d
+
+    # Useful shortcuts
+    last = log -1 HEAD
+    contributors = shortlog -sn
+    aliases = config --get-regexp alias
+    branches = for-each-ref --sort=-committerdate --format='%(color:cyan)%(refname:short)%(color:reset) - %(contents:subject) - %(authorname) (%(color:green)%(committerdate:relative)%(color:reset))'
+    
+    # Work in progress
+    wip = !git add -A && git commit -m 'WIP'
+    unwip = reset HEAD~1
+
+    # What changed today
+    today = log --since=midnight --author='Your Name' --oneline
+
+    # Find commits
+    find-commit = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short --grep=$1; }; f"
+    find-message = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short --all --grep=$1; }; f"
+
+#-------------------------------------------------------------------------------
+# URL Shortcuts
+#-------------------------------------------------------------------------------
+[url "git@github.com:"]
+    insteadOf = gh:
+
+[url "git@gitlab.com:"]
+    insteadOf = gl:
+
+#-------------------------------------------------------------------------------
+# Delta (optional - better diff viewer)
+#-------------------------------------------------------------------------------
+# Install: cargo install git-delta (or via package manager)
+# Uncomment below to enable
+#
+# [core]
+#     pager = delta
+#
+# [interactive]
+#     diffFilter = delta --color-only
+#
+# [delta]
+#     navigate = true
+#     light = false
+#     side-by-side = true
+#     line-numbers = true
+
+#-------------------------------------------------------------------------------
+# Commit Signing (optional)
+#-------------------------------------------------------------------------------
+# Uncomment and configure for signed commits
+# [commit]
+#     gpgsign = true
+# [gpg]
+#     program = gpg
