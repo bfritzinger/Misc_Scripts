@@ -16,6 +16,7 @@ A collection of utility scripts for various system administration and automation
 | Alias Distribute | Distributes bash aliases to all nodes listed in /etc/hosts | [README](./alias-dist/README.md) |
 | Git Star Repo | A Python script that fetches all your GitHub starred repositories and generates a summary report with statistics and a full listing. | [README](./github-star-repos/README.md) | 
 | Dot Files | Personal configuration files for setting up a new Linux system.| [README](./dotfiles/README.md) |
+| Hung Connections | A utility for detecting and terminating hung network connections on Unix-based systems. Available in both Python and Bash | [README](./HungConnections/README.md). |
 
 
 ## Quick Start
@@ -100,7 +101,11 @@ Misc_Scripts/
     ├── .ssh/
     │   └── config           
     └── .config/
-        └── ...              
+        └── ...
+└── HUng Connections/
+    ├── README.md
+    └── hung_connection_killer.sh
+    └── hung_connection_killer.py
     
 
 
