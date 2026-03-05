@@ -17,6 +17,7 @@ A collection of utility scripts for various system administration and automation
 | Git Star Repo | A Python script that fetches all your GitHub starred repositories and generates a summary report with statistics and a full listing. | [README](./github-star-repos/README.md) | 
 | Dot Files | Personal configuration files for setting up a new Linux system.| [README](./dotfiles/README.md) |
 | Hung Connections | A utility for detecting and terminating hung network connections on Unix-based systems. Available in both Python and Bash | [README](./HungConnections/README.md) |
+| Health Check | A single-file bash script that performs a comprehensive system health check and simultaneously exports every measured value to a **CSV** (for trend analysis) and a **JSON snapshot** (for tooling integration). Run it on a schedule and pipe the CSV into pandas, Grafana, Excel, or gnuplot to watch metrics evolve over time | [READEME](./HealthCheck/README.md) |
 
 
 ## Quick Start
@@ -106,6 +107,10 @@ Misc_Scripts/
     ├── README.md
     └── hung_connection_killer.sh
     └── hung_connection_killer.py
+└── Health Check/
+    ├── README.md
+    └── system_health_check.sh
+
     
 
 
