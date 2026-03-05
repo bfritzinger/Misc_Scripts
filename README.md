@@ -18,6 +18,7 @@ A collection of utility scripts for various system administration and automation
 | Dot Files | Personal configuration files for setting up a new Linux system.| [README](./dotfiles/README.md) |
 | Hung Connections | A utility for detecting and terminating hung network connections on Unix-based systems. Available in both Python and Bash | [README](./HungConnections/README.md) |
 | Health Check | A single-file bash script that performs a comprehensive system health check and simultaneously exports every measured value to a **CSV** (for trend analysis) and a **JSON snapshot** (for tooling integration). Run it on a schedule and pipe the CSV into pandas, Grafana, Excel, or gnuplot to watch metrics evolve over time | [README](./HealthCheck/README.md) |
+| Chowned Thottled | A performance-conscious bash script for recursively changing file ownership across multiple directories on high-throughput systems. Designed to run safely alongside active workloads by controlling CPU and I/O priority, batching filesystem operations to avoid argument list limits, and skipping files that are already correctly owned | [README](./chown_throttled/README.md) |
 
 
 ## Quick Start
@@ -110,6 +111,9 @@ Misc_Scripts/
 └── Health Check/
     ├── README.md
     └── system_health_check.sh
+└── chown_throttled
+    ├── README.md
+    └── chown_throttled.sh
 
     
 
