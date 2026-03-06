@@ -772,7 +772,7 @@ show_menu() {
     echo -e "${BOLD}${CYAN}"
     echo "  ╔══════════════════════════════════════════════════════╗"
     echo "  ║         Linux Troubleshooting Toolkit                ║"
-    echo "  ║         $(date '+%Y-%m-%d %H:%M:%S')                        ║"
+    echo "  ║         $(date '+%Y-%m-%d %H:%M:%S')                          ║"
     echo "  ╚══════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
     echo -e "  ${BOLD}Select a module:${RESET}\n"
