@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hung Connection Killer — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0c0f;
+    --surface:   #0f1318;
+    --panel:     #141921;
+    --border:    #1e2a38;
+    --accent:    #00d4ff;
+    --green:     #00e676;
+    --amber:     #ffc107;
+    --red:       #ff4444;
+    --orange:    #ff7043;
+    --purple:    #9c6fff;
+    --muted:     #4a5568;
+    --text:      #c8d8e8;
+    --text-dim:  #6b7c93;
+    --mono:      'Share Tech Mono', monospace;
+    --sans:      'Exo 2', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.013) 2px,
+      rgba(0,212,255,0.013) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Subtle grid bg */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 24px; }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom: 2px solid var(--accent);
+    border-radius: 4px 4px 0 0;
+    margin-bottom: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  header::before {
+    content: '';
+    position: absolute; left: 0; top: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg, var(--accent), var(--purple));
+  }
+
+  .header-left { display: flex; align-items: center; gap: 18px; }
+
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(156,111,255,0.1));
+    border: 1px solid rgba(0,212,255,0.3);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+
+  .header-title { font-size: 20px; font-weight: 700; letter-spacing: 1px; color: #fff; }
+  .header-sub { font-size: 11px; color: var(--text-dim); font-family: var(--mono); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  .mode-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .mode-badge.dry  { background: rgba(255,193,7,0.12); color: var(--amber); border: 1px solid rgba(255,193,7,0.3); }
+  .mode-badge.live { background: rgba(255,68,68,0.12);  color: var(--red);   border: 1px solid rgba(255,68,68,0.3); }
+  .mode-badge.none { background: rgba(74,85,104,0.3);   color: var(--muted); border: 1px solid var(--border); }
+
+  .timestamp { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ── STAT CARDS ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin-bottom: 2px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 18px 20px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.total   { border-top: 2px solid var(--accent); }
+  .stat-card.total::after   { background: linear-gradient(90deg, var(--accent), transparent); }
+  .stat-card.hung    { border-top: 2px solid var(--orange); }
+  .stat-card.hung::after    { background: linear-gradient(90deg, var(--orange), transparent); }
+  .stat-card.killed  { border-top: 2px solid var(--green); }
+  .stat-card.killed::after  { background: linear-gradient(90deg, var(--green), transparent); }
+  .stat-card.failed  { border-top: 2px solid var(--red); }
+  .stat-card.failed::after  { background: linear-gradient(90deg, var(--red), transparent); }
+  .stat-card.skipped { border-top: 2px solid var(--purple); }
+  .stat-card.skipped::after { background: linear-gradient(90deg, var(--purple), transparent); }
+
+  .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 36px;
+    line-height: 1;
+    font-weight: 400;
+  }
+
+  .stat-card.total   .stat-value { color: var(--accent); }
+  .stat-card.hung    .stat-value { color: var(--orange); }
+  .stat-card.killed  .stat-value { color: var(--green); }
+  .stat-card.failed  .stat-value { color: var(--red); }
+  .stat-card.skipped .stat-value { color: var(--purple); }
+
+  /* ── MAIN CONTENT ── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 2px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .panel-controls { display: flex; gap: 8px; align-items: center; }
+
+  .filter-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { background: rgba(0,212,255,0.1); border-color: var(--accent); color: var(--accent); }
+  .filter-btn.state-close_wait.active { background: rgba(255,112,67,0.1); border-color: var(--orange); color: var(--orange); }
+  .filter-btn.state-fin_wait1.active,
+  .filter-btn.state-fin_wait2.active  { background: rgba(255,193,7,0.1);  border-color: var(--amber);  color: var(--amber); }
+  .filter-btn.state-time_wait.active  { background: rgba(156,111,255,0.1);border-color: var(--purple); color: var(--purple); }
+  .filter-btn.state-last_ack.active,
+  .filter-btn.state-closing.active    { background: rgba(255,68,68,0.1);  border-color: var(--red);    color: var(--red); }
+
+  /* ── CONNECTIONS TABLE ── */
+  .table-wrap { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(30,42,56,0.6);
+    transition: background 0.1s;
+    animation: rowIn 0.3s ease both;
+  }
+  tbody tr:hover { background: rgba(0,212,255,0.03); }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  tbody td {
+    padding: 9px 14px;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  .state-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .state-CLOSE_WAIT { background: rgba(255,112,67,0.15); color: var(--orange); border: 1px solid rgba(255,112,67,0.3); }
+  .state-FIN_WAIT1  { background: rgba(255,193,7,0.12);  color: var(--amber);  border: 1px solid rgba(255,193,7,0.3); }
+  .state-FIN_WAIT2  { background: rgba(255,193,7,0.12);  color: var(--amber);  border: 1px solid rgba(255,193,7,0.3); }
+  .state-TIME_WAIT  { background: rgba(156,111,255,0.12);color: var(--purple); border: 1px solid rgba(156,111,255,0.3); }
+  .state-LAST_ACK   { background: rgba(255,68,68,0.12);  color: var(--red);    border: 1px solid rgba(255,68,68,0.3); }
+  .state-CLOSING    { background: rgba(255,68,68,0.12);  color: var(--red);    border: 1px solid rgba(255,68,68,0.3); }
+  .state-ESTABLISHED{ background: rgba(0,230,118,0.1);   color: var(--green);  border: 1px solid rgba(0,230,118,0.25);}
+
+  .action-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .action-terminated { background: rgba(0,230,118,0.1);  color: var(--green); border: 1px solid rgba(0,230,118,0.25); }
+  .action-would      { background: rgba(255,193,7,0.1);  color: var(--amber); border: 1px solid rgba(255,193,7,0.25); }
+  .action-skipped    { background: rgba(74,85,104,0.3);  color: var(--muted); border: 1px solid var(--border); }
+  .action-failed     { background: rgba(255,68,68,0.1);  color: var(--red);   border: 1px solid rgba(255,68,68,0.25); }
+
+  .proto-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: rgba(0,212,255,0.08);
+    color: var(--accent);
+    border: 1px solid rgba(0,212,255,0.2);
+    text-transform: uppercase;
+  }
+
+  .pid-text  { color: var(--text-dim); }
+  .proc-text { color: var(--accent); opacity: 0.8; }
+  .addr-text { color: var(--text); }
+  .reason-text { color: var(--text-dim); font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-state .empty-text { font-size: 13px; letter-spacing: 1px; }
+
+  /* ── LOG PANEL ── */
+  .log-body {
+    padding: 12px;
+    height: 520px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .log-entry { display: flex; gap: 8px; padding: 2px 0; }
+  .log-entry:hover { background: rgba(255,255,255,0.02); }
+
+  .log-ts    { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .log-level { flex-shrink: 0; width: 40px; text-align: center; }
+  .log-INFO  .log-level { color: var(--accent); }
+  .log-WARN  .log-level { color: var(--amber); }
+  .log-ERROR .log-level { color: var(--red); }
+  .log-DEBUG .log-level { color: var(--muted); }
+  .log-msg   { color: var(--text); word-break: break-word; }
+  .log-WARN  .log-msg   { color: var(--amber); opacity: 0.85; }
+  .log-ERROR .log-msg   { color: var(--red); }
+
+  /* ── INPUT PANEL ── */
+  .input-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-top: 2px;
+    border-radius: 0 0 4px 4px;
+  }
+
+  .input-panel .panel-header {
+    border-radius: 0;
+  }
+
+  textarea {
+    width: 100%;
+    background: var(--bg);
+    border: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 16px;
+    resize: vertical;
+    min-height: 120px;
+    outline: none;
+    border-top: 1px solid var(--border);
+    line-height: 1.6;
+  }
+  textarea::placeholder { color: var(--muted); }
+
+  .input-actions {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    align-items: center;
+  }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 7px 18px;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    font-weight: 600;
+  }
+
+  .btn-primary {
+    background: rgba(0,212,255,0.12);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .btn-primary:hover { background: rgba(0,212,255,0.22); }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .btn-secondary:hover { border-color: var(--text-dim); color: var(--text); }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid rgba(255,68,68,0.3);
+    color: var(--red);
+  }
+  .btn-danger:hover { background: rgba(255,68,68,0.1); }
+
+  .hint { color: var(--text-dim); font-size: 11px; font-family: var(--mono); margin-left: auto; }
+
+  /* ── CHARTS ROW ── */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px 18px;
+  }
+
+  .chart-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+
+  .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; }
+  .bar-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    width: 90px;
+    flex-shrink: 0;
+    color: var(--text-dim);
+  }
+  .bar-track {
+    flex: 1;
+    height: 16px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+    width: 0%;
+  }
+  .bar-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .bar-CLOSE_WAIT { background: linear-gradient(90deg, var(--orange), rgba(255,112,67,0.5)); }
+  .bar-FIN_WAIT1  { background: linear-gradient(90deg, var(--amber),  rgba(255,193,7,0.5)); }
+  .bar-FIN_WAIT2  { background: linear-gradient(90deg, var(--amber),  rgba(255,193,7,0.5)); }
+  .bar-TIME_WAIT  { background: linear-gradient(90deg, var(--purple), rgba(156,111,255,0.5)); }
+  .bar-LAST_ACK   { background: linear-gradient(90deg, var(--red),    rgba(255,68,68,0.5)); }
+  .bar-CLOSING    { background: linear-gradient(90deg, var(--red),    rgba(255,68,68,0.5)); }
+  .bar-other      { background: linear-gradient(90deg, var(--muted),  rgba(74,85,104,0.5)); }
+
+  /* Process donut */
+  .proc-list { display: flex; flex-direction: column; gap: 6px; }
+  .proc-row  { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; }
+  .proc-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .proc-name { flex: 1; color: var(--text); }
+  .proc-cnt  { color: var(--text-dim); }
+
+  /* Timeline */
+  .timeline { position: relative; }
+  .tl-entries { display: flex; flex-direction: column; gap: 0; }
+  .tl-entry {
+    display: flex;
+    gap: 12px;
+    padding: 6px 0;
+    border-left: 1px solid var(--border);
+    margin-left: 6px;
+    padding-left: 16px;
+    position: relative;
+    font-size: 11px;
+  }
+  .tl-entry::before {
+    content: '';
+    position: absolute; left: -4px; top: 14px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    border: 1px solid var(--panel);
+  }
+  .tl-entry.tl-warn::before  { background: var(--amber); }
+  .tl-entry.tl-error::before { background: var(--red); }
+  .tl-entry.tl-info::before  { background: var(--accent); }
+  .tl-ts  { color: var(--muted); font-family: var(--mono); flex-shrink: 0; font-size: 10px; }
+  .tl-msg { color: var(--text); line-height: 1.4; }
+
+  /* ── SAMPLE DATA BUTTON ── */
+  .load-sample {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--muted);
+    background: none; border: none; padding: 0;
+    letter-spacing: 0.5px;
+  }
+  .load-sample:hover { color: var(--accent); }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    .main-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: repeat(3, 1fr); }
+    .charts-row { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 700px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .charts-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="header-title">HUNG CONNECTION KILLER</div>
+        <div class="header-sub">Network Diagnostics Dashboard</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="mode-badge none" id="modeBadge">NO DATA</span>
+      <span class="timestamp" id="runTimestamp">—</span>
+    </div>
+  </header>
+
+  <!-- STAT CARDS -->
+  <div class="stats-row">
+    <div class="stat-card total">
+      <div class="stat-label">Total Scanned</div>
+      <div class="stat-value" id="statTotal">—</div>
+    </div>
+    <div class="stat-card hung">
+      <div class="stat-label">Hung Found</div>
+      <div class="stat-value" id="statHung">—</div>
+    </div>
+    <div class="stat-card killed">
+      <div class="stat-label">Terminated</div>
+      <div class="stat-value" id="statKilled">—</div>
+    </div>
+    <div class="stat-card failed">
+      <div class="stat-label">Failed</div>
+      <div class="stat-value" id="statFailed">—</div>
+    </div>
+    <div class="stat-card skipped">
+      <div class="stat-label">Skipped</div>
+      <div class="stat-value" id="statSkipped">—</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID: TABLE + LOG -->
+  <div class="main-grid">
+
+    <!-- CONNECTIONS TABLE -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Connections</span>
+        <div class="panel-controls" id="stateFilters">
+          <button class="filter-btn active" data-state="ALL" onclick="filterState(this)">ALL</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Proto</th>
+              <th>State</th>
+              <th>Local</th>
+              <th>Remote</th>
+              <th>PID</th>
+              <th>Process</th>
+              <th>Action</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="connTable">
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <div class="empty-icon">🔌</div>
+                  <div class="empty-text">Paste log output below to visualize connections</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LOG PANEL -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Log Stream</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)" id="logCount">0 entries</span>
+      </div>
+      <div class="log-body" id="logBody">
+        <div class="empty-state" style="padding:40px 10px">
+          <div class="empty-icon" style="font-size:28px">📋</div>
+          <div class="empty-text">Log entries appear here</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW -->
+  <div class="charts-row">
+
+    <div class="chart-panel">
+      <div class="chart-title">State Distribution</div>
+      <div class="bar-chart" id="stateChart">
+        <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No data loaded</div>
+      </div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-title">Top Processes</div>
+      <div class="proc-list" id="procChart">
+        <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No data loaded</div>
+      </div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-title">Event Timeline</div>
+      <div class="tl-entries" id="timeline">
+        <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No data loaded</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUT PANEL -->
+  <div class="input-panel">
+    <div class="panel-header">
+      <span class="panel-title">Log Input</span>
+      <button class="load-sample" onclick="loadSample()">load sample data</button>
+    </div>
+    <textarea id="logInput" rows="6"
+      placeholder="Paste output from hung_connection_killer.py --dry-run or --live here...
+
+Example:
+2024-01-15 10:30:45 - INFO - Found 47 total connections
+2024-01-15 10:30:45 - WARN - Hung connection detected: tcp CLOSE_WAIT 10.0.0.5:8080 -> 10.0.0.100:52431 (PID: 1234, Process: myapp)
+..."></textarea>
+    <div class="input-actions">
+      <button class="btn btn-primary" onclick="parseLog()">⚡ Parse &amp; Visualize</button>
+      <button class="btn btn-secondary" onclick="loadSample()">Load Sample</button>
+      <button class="btn btn-danger" onclick="clearAll()">Clear</button>
+      <span class="hint">Supports both Python &amp; Bash script output</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── STATE ──
+let allConnections = [];
+let currentFilter = 'ALL';
+
+// ── PARSER ──
+function parseLog() {
+  const raw = document.getElementById('logInput').value.trim();
+  if (!raw) return;
+
+  const lines = raw.split('\n');
+  const logEntries = [];
+  const connections = [];
+  const summary = { total: null, hung: null, killed: null, failed: null, skipped: null };
+  let mode = 'none';
+  let runTs = null;
+
+  // Regexes
+  const reLine    = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+-\s+(INFO|WARN|ERROR|DEBUG)\s+-\s+(.+)$/;
+  const reHung    = /Hung connection detected:\s+(tcp|udp)\s+(\S+)\s+(\S+):(\d+)\s+->\s+(\S+):(\d+)\s+\(PID:\s*(\d+),\s*Process:\s*(.+?)\)/i;
+  const reReason  = /Reason:\s*(.+)/;
+  const reAction  = /\[(?:DRY RUN|LIVE)\]\s+(Would terminate|Terminated|Skipped|Failed to terminate):\s+(tcp|udp)\s+(\S+)\s+(\S+):(\d+)\s+->\s+(\S+):(\d+)/i;
+  const reSumTotal  = /Total connections scanned:\s*(\d+)/;
+  const reSumHung   = /Hung connections found:\s*(\d+)/;
+  const reSumKill   = /Connections terminated:\s*(\d+)/;
+  const reSumFail   = /Failed terminations:\s*(\d+)/;
+  const reSumSkip   = /Connections skipped:\s*(\d+)/;
+  const reDryMode   = /DRY RUN/;
+  const reLiveMode  = /LIVE/;
+
+  const connMap = {}; // key -> connection obj
+  let lastHungKey = null;
+
+  lines.forEach(line => {
+    const m = reLine.exec(line);
+    if (!m) return;
+    const [, ts, level, msg] = m;
+
+    if (!runTs) runTs = ts;
+
+    // Mode detection
+    if (reDryMode.test(msg))  mode = 'dry';
+    if (reLiveMode.test(msg) && !reDryMode.test(msg)) mode = 'live';
+
+    // Log entry
+    logEntries.push({ ts, level, msg });
+
+    // Summary lines
+    let sm;
+    if ((sm = reSumTotal.exec(msg))) summary.total   = parseInt(sm[1]);
+    if ((sm = reSumHung.exec(msg)))  summary.hung    = parseInt(sm[1]);
+    if ((sm = reSumKill.exec(msg)))  summary.killed  = parseInt(sm[1]);
+    if ((sm = reSumFail.exec(msg)))  summary.failed  = parseInt(sm[1]);
+    if ((sm = reSumSkip.exec(msg)))  summary.skipped = parseInt(sm[1]);
+
+    // Hung detection line
+    const mh = reHung.exec(msg);
+    if (mh) {
+      const key = `${mh[3]}:${mh[4]}->${mh[5]}:${mh[6]}`;
+      const conn = {
+        proto: mh[1].toUpperCase(),
+        state: mh[2].toUpperCase(),
+        localAddr:  mh[3],
+        localPort:  mh[4],
+        remoteAddr: mh[5],
+        remotePort: mh[6],
+        pid:     mh[7],
+        process: mh[8],
+        action:  'detected',
+        reason:  '',
+        ts
+      };
+      connMap[key] = conn;
+      lastHungKey = key;
+    }
+
+    // Reason line (indented)
+    const mr = reReason.exec(msg);
+    if (mr && lastHungKey && connMap[lastHungKey]) {
+      connMap[lastHungKey].reason = mr[1];
+    }
+
+    // Action line
+    const ma = reAction.exec(msg);
+    if (ma) {
+      const key = `${ma[4]}:${ma[5]}->${ma[6]}:${ma[7]}`;
+      const actionRaw = ma[1].toLowerCase();
+      let action = 'detected';
+      if (actionRaw.includes('would'))      action = 'would';
+      else if (actionRaw.includes('terminated')) action = 'terminated';
+      else if (actionRaw.includes('skipped'))    action = 'skipped';
+      else if (actionRaw.includes('failed'))     action = 'failed';
+
+      if (connMap[key]) {
+        connMap[key].action = action;
+      } else {
+        connMap[key] = {
+          proto: ma[2].toUpperCase(),
+          state: 'UNKNOWN',
+          localAddr:  ma[4],
+          localPort:  ma[5],
+          remoteAddr: ma[6],
+          remotePort: ma[7],
+          pid: '—', process: '—', action, reason: '', ts
+        };
+      }
+    }
+  });
+
+  allConnections = Object.values(connMap);
+
+  // Render everything
+  renderHeader(mode, runTs);
+  renderStats(summary, allConnections);
+  renderTable(allConnections);
+  renderLog(logEntries);
+  renderStateChart(allConnections);
+  renderProcChart(allConnections);
+  renderTimeline(logEntries);
+  buildStateFilters(allConnections);
+}
+
+// ── RENDER HEADER ──
+function renderHeader(mode, ts) {
+  const badge = document.getElementById('modeBadge');
+  badge.className = 'mode-badge';
+  if (mode === 'dry')  { badge.classList.add('dry');  badge.textContent = '⚠ DRY RUN'; }
+  else if (mode === 'live') { badge.classList.add('live'); badge.textContent = '● LIVE'; }
+  else                      { badge.classList.add('none'); badge.textContent = 'PARSED'; }
+  document.getElementById('runTimestamp').textContent = ts || '—';
+}
+
+// ── RENDER STATS ──
+function renderStats(summary, conns) {
+  const stateCount = (s) => conns.filter(c => c.action === s).length;
+
+  document.getElementById('statTotal').textContent   = summary.total   !== null ? summary.total   : conns.length || '—';
+  document.getElementById('statHung').textContent    = summary.hung    !== null ? summary.hung    : conns.length || '—';
+  document.getElementById('statKilled').textContent  = summary.killed  !== null ? summary.killed  : stateCount('terminated') || '—';
+  document.getElementById('statFailed').textContent  = summary.failed  !== null ? summary.failed  : stateCount('failed')     || '—';
+  document.getElementById('statSkipped').textContent = summary.skipped !== null ? summary.skipped : stateCount('skipped')    || '—';
+}
+
+// ── RENDER TABLE ──
+function renderTable(conns, filter = 'ALL') {
+  const tbody = document.getElementById('connTable');
+  const filtered = filter === 'ALL' ? conns : conns.filter(c => c.state === filter);
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+      <div class="empty-icon">✅</div>
+      <div class="empty-text">${filter === 'ALL' ? 'No connections parsed' : 'No connections in this state'}</div>
+    </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((c, i) => `
+    <tr style="animation-delay:${i * 0.03}s">
+      <td><span class="proto-badge">${esc(c.proto)}</span></td>
+      <td><span class="state-badge state-${esc(c.state)}">${esc(c.state.replace('_',' '))}</span></td>
+      <td class="addr-text">${esc(c.localAddr)}:<span style="color:var(--accent)">${esc(c.localPort)}</span></td>
+      <td class="addr-text">${esc(c.remoteAddr)}:<span style="color:var(--text-dim)">${esc(c.remotePort)}</span></td>
+      <td class="pid-text">${esc(c.pid)}</td>
+      <td class="proc-text">${esc(c.process)}</td>
+      <td>${renderAction(c.action)}</td>
+      <td class="reason-text" title="${esc(c.reason)}">${esc(c.reason) || '—'}</td>
+    </tr>`).join('');
+}
+
+function renderAction(action) {
+  const map = {
+    'terminated': ['action-terminated', '✓ TERMINATED'],
+    'would':      ['action-would',      '~ WOULD TERM'],
+    'skipped':    ['action-skipped',    '— SKIPPED'],
+    'failed':     ['action-failed',     '✗ FAILED'],
+    'detected':   ['action-would',      '⚠ DETECTED'],
+  };
+  const [cls, label] = map[action] || ['action-skipped', action.toUpperCase()];
+  return `<span class="action-badge ${cls}">${label}</span>`;
+}
+
+// ── RENDER LOG ──
+function renderLog(entries) {
+  const body = document.getElementById('logBody');
+  document.getElementById('logCount').textContent = `${entries.length} entries`;
+
+  if (!entries.length) {
+    body.innerHTML = `<div class="empty-state" style="padding:40px 10px"><div class="empty-text">No log entries</div></div>`;
+    return;
+  }
+
+  body.innerHTML = entries.map(e => `
+    <div class="log-entry log-${esc(e.level)}">
+      <span class="log-ts">${esc(e.ts.split(' ')[1])}</span>
+      <span class="log-level">${esc(e.level)}</span>
+      <span class="log-msg">${esc(e.msg)}</span>
+    </div>`).join('');
+
+  body.scrollTop = body.scrollHeight;
+}
+
+// ── RENDER STATE CHART ──
+function renderStateChart(conns) {
+  const states = {};
+  conns.forEach(c => { states[c.state] = (states[c.state] || 0) + 1; });
+  const max = Math.max(...Object.values(states), 1);
+
+  const stateOrder = ['CLOSE_WAIT','FIN_WAIT1','FIN_WAIT2','TIME_WAIT','LAST_ACK','CLOSING'];
+  const sorted = [...stateOrder.filter(s => states[s]), ...Object.keys(states).filter(s => !stateOrder.includes(s))];
+
+  const el = document.getElementById('stateChart');
+  if (!sorted.length) { el.innerHTML = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No connection states found</div>'; return; }
+
+  el.innerHTML = sorted.map(state => {
+    const cnt = states[state] || 0;
+    const pct = (cnt / max * 100).toFixed(1);
+    const cls = stateOrder.includes(state) ? `bar-${state}` : 'bar-other';
+    return `<div class="bar-row">
+      <span class="bar-label">${state.replace('_',' ')}</span>
+      <div class="bar-track"><div class="bar-fill ${cls}" style="width:0%" data-target="${pct}%"></div></div>
+      <span class="bar-count">${cnt}</span>
+    </div>`;
+  }).join('');
+
+  // Animate bars
+  requestAnimationFrame(() => {
+    el.querySelectorAll('.bar-fill').forEach(b => { b.style.width = b.dataset.target; });
+  });
+}
+
+// ── RENDER PROC CHART ──
+function renderProcChart(conns) {
+  const procs = {};
+  conns.forEach(c => { if (c.process && c.process !== '—') procs[c.process] = (procs[c.process] || 0) + 1; });
+  const sorted = Object.entries(procs).sort((a,b) => b[1]-a[1]).slice(0, 8);
+
+  const colors = [
+    '#00d4ff','#9c6fff','#ff7043','#ffc107','#00e676',
+    '#ff4444','#40c4ff','#f48fb1'
+  ];
+
+  const el = document.getElementById('procChart');
+  if (!sorted.length) { el.innerHTML = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No process data found</div>'; return; }
+
+  el.innerHTML = sorted.map(([name, cnt], i) => `
+    <div class="proc-row">
+      <div class="proc-dot" style="background:${colors[i % colors.length]}"></div>
+      <span class="proc-name">${esc(name)}</span>
+      <span class="proc-cnt">${cnt}</span>
+    </div>`).join('');
+}
+
+// ── RENDER TIMELINE ──
+function renderTimeline(entries) {
+  const el = document.getElementById('timeline');
+  const key = entries.filter(e =>
+    e.level === 'WARN' || e.level === 'ERROR' ||
+    e.msg.includes('Terminated') || e.msg.includes('Failed') ||
+    e.msg.includes('Summary') || e.msg.includes('total connections')
+  ).slice(0, 12);
+
+  if (!key.length) { el.innerHTML = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No events found</div>'; return; }
+
+  el.innerHTML = key.map(e => {
+    let cls = 'tl-info';
+    if (e.level === 'WARN') cls = 'tl-warn';
+    if (e.level === 'ERROR') cls = 'tl-error';
+    const short = e.msg.length > 60 ? e.msg.substring(0, 60) + '…' : e.msg;
+    return `<div class="tl-entry ${cls}">
+      <span class="tl-ts">${e.ts.split(' ')[1]}</span>
+      <span class="tl-msg">${esc(short)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── STATE FILTERS ──
+function buildStateFilters(conns) {
+  const states = [...new Set(conns.map(c => c.state))];
+  const container = document.getElementById('stateFilters');
+  container.innerHTML = `<button class="filter-btn active" data-state="ALL" onclick="filterState(this)">ALL</button>`;
+  states.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = `filter-btn state-${s.toLowerCase()}`;
+    btn.dataset.state = s;
+    btn.textContent = s.replace('_',' ');
+    btn.onclick = function() { filterState(this); };
+    container.appendChild(btn);
+  });
+}
+
+function filterState(btn) {
+  currentFilter = btn.dataset.state;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(allConnections, currentFilter);
+}
+
+// ── UTILS ──
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function clearAll() {
+  document.getElementById('logInput').value = '';
+  allConnections = [];
+  currentFilter = 'ALL';
+  document.getElementById('connTable').innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🔌</div><div class="empty-text">Paste log output below to visualize connections</div></div></td></tr>`;
+  document.getElementById('logBody').innerHTML = `<div class="empty-state" style="padding:40px 10px"><div class="empty-icon" style="font-size:28px">📋</div><div class="empty-text">Log entries appear here</div></div>`;
+  document.getElementById('stateFilters').innerHTML = `<button class="filter-btn active" data-state="ALL" onclick="filterState(this)">ALL</button>`;
+  ['statTotal','statHung','statKilled','statFailed','statSkipped'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('modeBadge').className = 'mode-badge none';
+  document.getElementById('modeBadge').textContent = 'NO DATA';
+  document.getElementById('runTimestamp').textContent = '—';
+  document.getElementById('stateChart').innerHTML = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No data loaded</div>';
+  document.getElementById('procChart').innerHTML  = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No data loaded</div>';
+  document.getElementById('timeline').innerHTML   = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px">No data loaded</div>';
+  document.getElementById('logCount').textContent = '0 entries';
+}
+
+// ── SAMPLE DATA ──
+function loadSample() {
+  const sample = `2024-01-15 10:30:41 - INFO - ============================================================
+2024-01-15 10:30:41 - INFO - Hung Connection Killer - DRY RUN
+2024-01-15 10:30:41 - INFO - ============================================================
+2024-01-15 10:30:41 - INFO - Scanning connections using: ss
+2024-01-15 10:30:42 - INFO - Found 47 total connections
+2024-01-15 10:30:42 - WARN - Hung connection detected: tcp CLOSE_WAIT 10.0.0.5:8080 -> 10.0.0.100:52431 (PID: 1234, Process: myapp)
+2024-01-15 10:30:42 - WARN -   Reason: CLOSE_WAIT without active timer (likely app not closing socket)
+2024-01-15 10:30:42 - INFO - [DRY RUN] Would terminate: tcp CLOSE_WAIT 10.0.0.5:8080 -> 10.0.0.100:52431 (PID: 1234, Process: myapp)
+2024-01-15 10:30:42 - WARN - Hung connection detected: tcp CLOSE_WAIT 10.0.0.5:8080 -> 10.0.0.101:61204 (PID: 1234, Process: myapp)
+2024-01-15 10:30:42 - WARN -   Reason: CLOSE_WAIT without active timer (likely app not closing socket)
+2024-01-15 10:30:42 - INFO - [DRY RUN] Would terminate: tcp CLOSE_WAIT 10.0.0.5:8080 -> 10.0.0.101:61204 (PID: 1234, Process: myapp)
+2024-01-15 10:30:42 - WARN - Hung connection detected: tcp FIN_WAIT2 10.0.0.5:443 -> 192.168.1.45:49221 (PID: 2891, Process: nginx)
+2024-01-15 10:30:42 - WARN -   Reason: FIN_WAIT2 exceeded 120s threshold
+2024-01-15 10:30:42 - INFO - [DRY RUN] Would terminate: tcp FIN_WAIT2 10.0.0.5:443 -> 192.168.1.45:49221 (PID: 2891, Process: nginx)
+2024-01-15 10:30:43 - WARN - Hung connection detected: tcp TIME_WAIT 10.0.0.5:8443 -> 10.0.0.200:38120 (PID: 3017, Process: cloudflared)
+2024-01-15 10:30:43 - WARN -   Reason: TIME_WAIT exceeded 300s
+2024-01-15 10:30:43 - INFO - [DRY RUN] Would terminate: tcp TIME_WAIT 10.0.0.5:8443 -> 10.0.0.200:38120 (PID: 3017, Process: cloudflared)
+2024-01-15 10:30:43 - WARN - Hung connection detected: tcp LAST_ACK 10.0.0.5:9090 -> 10.0.0.50:55000 (PID: 4102, Process: prometheus)
+2024-01-15 10:30:43 - WARN -   Reason: LAST_ACK stuck for 95s without ACK
+2024-01-15 10:30:43 - INFO - [DRY RUN] Would terminate: tcp LAST_ACK 10.0.0.5:9090 -> 10.0.0.50:55000 (PID: 4102, Process: prometheus)
+2024-01-15 10:30:43 - WARN - Hung connection detected: tcp FIN_WAIT1 10.0.0.5:3000 -> 10.0.0.33:44801 (PID: 5541, Process: grafana)
+2024-01-15 10:30:43 - WARN -   Reason: FIN_WAIT1 exceeded 120s with no ACK received
+2024-01-15 10:30:43 - INFO - [DRY RUN] Would terminate: tcp FIN_WAIT1 10.0.0.5:3000 -> 10.0.0.33:44801 (PID: 5541, Process: grafana)
+2024-01-15 10:30:44 - INFO - Skipping protected process sshd (PID: 812)
+2024-01-15 10:30:44 - INFO - Skipping protected process kubelet (PID: 1019)
+2024-01-15 10:30:44 - INFO - Skipping excluded port 22 for connection to 10.0.0.1:22
+2024-01-15 10:30:44 - INFO - ------------------------------------------------------------
+2024-01-15 10:30:44 - INFO - Summary:
+2024-01-15 10:30:44 - INFO -   Total connections scanned: 47
+2024-01-15 10:30:44 - INFO -   Hung connections found: 6
+2024-01-15 10:30:44 - INFO -   Connections skipped: 12
+2024-01-15 10:30:44 - INFO -   Connections terminated: 6
+2024-01-15 10:30:44 - INFO -   Failed terminations: 0
+2024-01-15 10:30:44 - INFO - ============================================================`;
+
+  document.getElementById('logInput').value = sample;
+  parseLog();
+}
+</script>
+</body>
+</html>
