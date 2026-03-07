@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linux Troubleshoot Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #080b0f;
+  --surface:  #0d1117;
+  --panel:    #111820;
+  --raised:   #16202c;
+  --border:   #1c2d3f;
+  --border2:  #243547;
+  --accent:   #00b4d8;
+  --accent2:  #0077a8;
+  --green:    #3dd68c;
+  --yellow:   #f5c518;
+  --red:      #f05454;
+  --orange:   #ff8c42;
+  --purple:   #a78bfa;
+  --blue:     #60a5fa;
+  --text:     #b8cfe0;
+  --text-dim: #5a7a94;
+  --text-hi:  #e2f0fc;
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'Rajdhani', sans-serif;
+  --sidebar-w: 240px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+.topbar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent 60%);
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; }
+.logo {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, rgba(0,180,216,.2), rgba(167,139,250,.1));
+  border: 1px solid rgba(0,180,216,.3);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.app-title { font-size: 17px; font-weight: 700; color: var(--text-hi); letter-spacing: .5px; }
+.app-sub   { font-size: 11px; color: var(--text-dim); font-family: var(--mono); letter-spacing: 1.5px; text-transform: uppercase; }
+
+.topbar-center { display: flex; gap: 16px; }
+
+.hc-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  font-family: var(--sans);
+  transition: border-color .2s;
+}
+.hc-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hc-pill.ok     { border-color: rgba(61,214,140,.25); color: var(--green); }
+.hc-pill.ok .dot{ background: var(--green); box-shadow: 0 0 6px var(--green); }
+.hc-pill.warn   { border-color: rgba(245,197,24,.25); color: var(--yellow); }
+.hc-pill.warn .dot{ background: var(--yellow); }
+.hc-pill.err    { border-color: rgba(240,84,84,.25); color: var(--red); }
+.hc-pill.err .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.hc-pill.none   { color: var(--text-dim); }
+.hc-pill.none .dot{ background: var(--border2); }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  transition: all .15s;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.btn-accent   { background: rgba(0,180,216,.12); border: 1px solid var(--accent); color: var(--accent); }
+.btn-accent:hover { background: rgba(0,180,216,.22); }
+.btn-ghost    { background: transparent; border: 1px solid var(--border2); color: var(--text-dim); }
+.btn-ghost:hover  { border-color: var(--text-dim); color: var(--text); }
+.btn-danger   { background: transparent; border: 1px solid rgba(240,84,84,.3); color: var(--red); }
+.btn-danger:hover { background: rgba(240,84,84,.1); }
+
+.run-ts { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+/* ── MAIN LAYOUT ── */
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-search {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-search input {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  outline: none;
+}
+.sidebar-search input::placeholder { color: var(--text-dim); }
+.sidebar-search input:focus { border-color: var(--accent); }
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background .1s;
+  position: relative;
+  user-select: none;
+}
+.nav-item:hover { background: rgba(0,180,216,.04); }
+.nav-item.active {
+  background: rgba(0,180,216,.08);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+.nav-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  width: 18px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  letter-spacing: .3px;
+}
+.nav-item.active .nav-label { color: var(--text-hi); }
+
+.nav-badges { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.nbadge {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.nbadge.ok   { background: rgba(61,214,140,.12); color: var(--green); }
+.nbadge.warn { background: rgba(245,197,24,.12);  color: var(--yellow); }
+.nbadge.err  { background: rgba(240,84,84,.12);  color: var(--red); }
+
+.sidebar-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* ── CONTENT ── */
+.content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── MODULE VIEW ── */
+.module-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+.module-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-hi);
+  letter-spacing: .5px;
+}
+.module-stats { display: flex; gap: 12px; align-items: center; font-family: var(--mono); font-size: 11px; }
+.mstat { display: flex; align-items: center; gap: 5px; }
+.mstat.ok   { color: var(--green); }
+.mstat.warn { color: var(--yellow); }
+.mstat.err  { color: var(--red); }
+
+/* Sections within module */
+.module-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+.section-block {
+  border-bottom: 1px solid rgba(28,45,63,.5);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  background: var(--raised);
+  cursor: pointer;
+  user-select: none;
+  transition: background .1s;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.section-header:hover { background: rgba(22,32,44,.9); }
+.section-arrow { font-size: 10px; color: var(--text-dim); transition: transform .2s; flex-shrink: 0; }
+.section-block.collapsed .section-arrow { transform: rotate(-90deg); }
+.section-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  flex: 1;
+}
+.section-mini-badges { display: flex; gap: 4px; }
+
+.section-body {
+  padding: 8px 20px 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.75;
+  overflow-x: auto;
+}
+.section-block.collapsed .section-body { display: none; }
+
+/* Line types */
+.line { display: flex; align-items: flex-start; gap: 8px; padding: 1px 0; min-width: 0; }
+.line-ok   .line-icon { color: var(--green); }
+.line-warn .line-icon { color: var(--yellow); }
+.line-err  .line-icon { color: var(--red); }
+.line-cmd  .line-icon { color: var(--text-dim); }
+.line-out  .line-icon { color: transparent; width: 14px; }
+.line-icon { flex-shrink: 0; width: 14px; text-align: center; margin-top: 1px; }
+.line-text { color: var(--text); word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
+.line-ok   .line-text { color: var(--green); }
+.line-warn .line-text { color: var(--yellow); }
+.line-err  .line-text { color: var(--red); }
+.line-cmd  .line-text { color: rgba(0,180,216,.7); font-style: italic; }
+.line-out  .line-text { color: var(--text-dim); }
+
+/* ── HEALTH SUMMARY SPECIAL VIEW ── */
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 16px 20px;
+}
+.health-card {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.health-card.ok   { border-left: 3px solid var(--green); }
+.health-card.warn { border-left: 3px solid var(--yellow); }
+.health-card.err  { border-left: 3px solid var(--red); }
+.hc-icon { font-size: 20px; flex-shrink: 0; }
+.hc-info {}
+.hc-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); font-weight: 600; margin-bottom: 3px; }
+.hc-val   { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.health-card.ok   .hc-val { color: var(--green); }
+.health-card.warn .hc-val { color: var(--yellow); }
+.health-card.err  .hc-val { color: var(--red); }
+
+/* ── EMPTY / NO DATA ── */
+.empty-module {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.empty-module .em-icon { font-size: 40px; opacity: .3; }
+.empty-module .em-text { font-size: 12px; letter-spacing: 1px; }
+
+/* ── INPUT PANEL ── */
+.input-section {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.input-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.input-header-left { display: flex; align-items: center; gap: 8px; }
+.input-toggle-icon { font-size: 10px; color: var(--text-dim); transition: transform .2s; }
+.input-section.expanded .input-toggle-icon { transform: rotate(180deg); }
+.input-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.input-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+.input-body { display: none; }
+.input-section.expanded .input-body { display: block; }
+
+textarea {
+  width: 100%;
+  background: var(--bg);
+  border: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 14px 16px;
+  resize: none;
+  height: 120px;
+  outline: none;
+  line-height: 1.6;
+}
+textarea::placeholder { color: var(--text-dim); }
+
+.input-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+  background: var(--panel);
+}
+.input-actions .spacer { flex: 1; }
+.sample-link {
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  cursor: pointer; text-decoration: underline; text-decoration-color: var(--border2);
+  background: none; border: none; padding: 0;
+  letter-spacing: .5px;
+}
+.sample-link:hover { color: var(--accent); }
+
+/* ── OVERVIEW MODULE (all modules summary) ── */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 16px;
+}
+.ov-card {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  position: relative;
+  overflow: hidden;
+}
+.ov-card:hover { border-color: var(--border2); background: rgba(22,32,44,.8); }
+.ov-card::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px;
+}
+.ov-card.all-ok   { border-top: 2px solid var(--green); }
+.ov-card.has-warn { border-top: 2px solid var(--yellow); }
+.ov-card.has-err  { border-top: 2px solid var(--red); }
+.ov-card.no-data  { border-top: 2px solid var(--border2); }
+.ov-num   { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+.ov-title { font-size: 13px; font-weight: 600; color: var(--text-hi); margin-bottom: 8px; }
+.ov-badges { display: flex; gap: 6px; }
+.ov-b {
+  font-family: var(--mono); font-size: 10px;
+  padding: 1px 7px; border-radius: 10px; font-weight: 600;
+}
+.ov-b.ok   { background: rgba(61,214,140,.1);  color: var(--green); }
+.ov-b.warn { background: rgba(245,197,24,.1);  color: var(--yellow); }
+.ov-b.err  { background: rgba(240,84,84,.1);   color: var(--red); }
+.ov-b.nd   { background: rgba(90,122,148,.1);  color: var(--text-dim); }
+
+/* ── FILE UPLOAD ── */
+.upload-zone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.drop-target {
+  flex: 1;
+  border: 1px dashed var(--border2);
+  border-radius: 4px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  position: relative;
+  overflow: hidden;
+}
+.drop-target:hover,
+.drop-target.drag-over {
+  border-color: var(--accent);
+  background: rgba(0,180,216,.05);
+}
+.drop-target.drag-over { border-style: solid; }
+.drop-icon { font-size: 18px; flex-shrink: 0; opacity: .6; }
+.drop-text { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+.drop-text span { color: var(--accent); text-decoration: underline; text-decoration-color: rgba(0,180,216,.4); }
+.drop-file-info { font-family: var(--mono); font-size: 11px; color: var(--green); display: none; }
+.drop-file-info.visible { display: flex; align-items: center; gap: 6px; }
+#fileInput { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.upload-or { font-family: var(--mono); font-size: 10px; color: var(--text-dim); flex-shrink: 0; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .topbar-center { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">🖥</div>
+    <div>
+      <div class="app-title">Linux Troubleshoot</div>
+      <div class="app-sub">Diagnostics Dashboard</div>
+    </div>
+  </div>
+  <div class="topbar-center" id="healthPills">
+    <div class="hc-pill none"><span class="dot"></span> No Data</div>
+  </div>
+  <div class="topbar-right">
+    <span class="run-ts" id="runTs">—</span>
+    <button class="btn btn-ghost"   onclick="loadSample()">Sample</button>
+    <button class="btn btn-accent"  onclick="triggerParse()">⚡ Parse</button>
+    <button class="btn btn-danger"  onclick="clearAll()">Clear</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-search">
+      <input type="text" id="navSearch" placeholder="Filter modules..." oninput="filterNav(this.value)">
+    </div>
+    <div class="sidebar-nav" id="sidebarNav">
+      <!-- populated by JS -->
+    </div>
+    <div class="sidebar-footer" id="sidebarFooter">0 modules parsed</div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content-area">
+    <div class="module-view" id="moduleView">
+      <div class="empty-module" id="emptyState">
+        <div class="em-icon">🔬</div>
+        <div class="em-text">Paste script output below &amp; click Parse</div>
+        <button class="btn btn-ghost" style="margin-top:8px" onclick="loadSample()">Load Sample Data</button>
+      </div>
+    </div>
+
+    <!-- INPUT PANEL -->
+    <div class="input-section expanded" id="inputSection">
+      <div class="input-header" onclick="toggleInput()">
+        <div class="input-header-left">
+          <span class="input-toggle-icon">▲</span>
+          <span class="input-label">Log Input</span>
+        </div>
+        <span class="input-hint">Paste output from linux_troubleshoot.sh</span>
+      </div>
+      <div class="input-body">
+        <div class="upload-zone">
+          <div class="drop-target" id="dropTarget">
+            <input type="file" id="fileInput" accept=".log,.txt,.out,text/*" onchange="handleFileSelect(event)">
+            <span class="drop-icon">📂</span>
+            <span class="drop-text" id="dropText">Drop log file here or <span>click to browse</span> &nbsp;·&nbsp; .log / .txt</span>
+            <span class="drop-file-info" id="dropFileInfo">✔ <span id="dropFileName"></span></span>
+          </div>
+          <span class="upload-or">— or —</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">paste below</span>
+        </div>
+        <textarea id="logInput" placeholder="Paste output from linux_troubleshoot.sh here.
+Supports full run (option A) or individual module output.
+
+Example:
+════════════════════════════════════════
+  SYSTEM OVERVIEW
+════════════════════════════════════════
+
+▶ OS & Kernel
+$ uname -a
+Linux protohub 6.8.0-51-generic #52-Ubuntu SMP ...
+✔ Load average OK: 0.45
+⚠ HIGH MEMORY USAGE: 91%
+✖ Failed to read sensor data"></textarea>
+        <div class="input-actions">
+          <button class="btn btn-ghost"  onclick="loadSample()">Load Sample</button>
+          <button class="btn btn-accent" onclick="triggerParse()">⚡ Parse &amp; Visualize</button>
+          <div class="spacer"></div>
+          <button class="sample-link" onclick="clearAll()">clear all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  MODULE DEFINITIONS
+// ═══════════════════════════════════════════════════════════
+const MODULE_DEFS = [
+  { id: 'overview',    num: '★',  label: 'Overview',           icon: '🗺' },
+  { id: 'system',      num: '1',  label: 'System Overview',     icon: '🖥' },
+  { id: 'cpu',         num: '2',  label: 'CPU & Memory',        icon: '⚡' },
+  { id: 'disk',        num: '3',  label: 'Disk & Filesystem',   icon: '💾' },
+  { id: 'network',     num: '4',  label: 'Network',             icon: '🌐' },
+  { id: 'processes',   num: '5',  label: 'Processes',           icon: '⚙' },
+  { id: 'logs',        num: '6',  label: 'System Logs',         icon: '📋' },
+  { id: 'services',    num: '7',  label: 'Services & Systemd',  icon: '🔧' },
+  { id: 'hardware',    num: '8',  label: 'Hardware',            icon: '🔌' },
+  { id: 'security',    num: '9',  label: 'Security',            icon: '🔒' },
+  { id: 'containers',  num: '10', label: 'Containers',          icon: '🐳' },
+  { id: 'kubernetes',  num: '11', label: 'Kubernetes / k3s',    icon: '☸' },
+  { id: 'dns',         num: '12', label: 'DNS Diagnostics',     icon: '🌍' },
+  { id: 'performance', num: '13', label: 'Performance',         icon: '📊' },
+  { id: 'kernel',      num: '14', label: 'Kernel & Boot',       icon: '🔬' },
+  { id: 'health',      num: '15', label: 'Health Summary',      icon: '❤' },
+];
+
+// Header patterns → module id
+const HEADER_MAP = [
+  [/SYSTEM OVERVIEW/i,          'system'],
+  [/CPU\s*[&\/]\s*MEMORY/i,     'cpu'],
+  [/DISK\s*[&\/]\s*FILESYSTEM/i,'disk'],
+  [/^NETWORK$/i,                'network'],
+  [/^PROCESSES$/i,              'processes'],
+  [/SYSTEM LOGS/i,              'logs'],
+  [/SERVICES\s*[&\/]\s*SYSTEMD/i,'services'],
+  [/^HARDWARE$/i,               'hardware'],
+  [/^SECURITY$/i,               'security'],
+  [/CONTAINERS?/i,              'containers'],
+  [/KUBERNETES/i,               'kubernetes'],
+  [/DNS DIAGNOSTICS/i,          'dns'],
+  [/PERFORMANCE/i,              'performance'],
+  [/KERNEL\s*[&\/]\s*BOOT/i,    'kernel'],
+  [/QUICK HEALTH SUMMARY/i,     'health'],
+];
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+let parsedModules = {};   // id -> { sections: [{name, lines:[]}], ok, warn, err }
+let healthChecks  = [];   // [{label, status, value}]
+let activeModule  = 'overview';
+let runTimestamp  = null;
+
+// ═══════════════════════════════════════════════════════════
+//  ANSI / TERMINAL SEQUENCE STRIP
+//  Strips ALL sequences: colors, cursor moves, screen clears,
+//  OSC strings, charset changes, and carriage returns.
+// ═══════════════════════════════════════════════════════════
+function stripAnsi(s) {
+  return s
+    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')        // CSI: colors, cursor, erase
+    .replace(/\x1b\][^\x07\x1b]*[\x07\x1b]/g, '') // OSC strings
+    .replace(/\x1b[()][AB012]/g, '')               // charset designations
+    .replace(/\x1b[^[\]()]/g, '')                  // other 2-char escapes
+    .replace(/\r/g, '');                           // carriage returns
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PARSER
+// ═══════════════════════════════════════════════════════════
+function parseLog() {
+  const raw = document.getElementById('logInput').value;
+  if (!raw.trim()) return;
+
+  parsedModules = {};
+  healthChecks  = [];
+  runTimestamp  = null;
+
+  const lines = raw.split('\n').map(l => stripAnsi(l));
+
+  // Pre-init all modules
+  MODULE_DEFS.slice(1).forEach(m => {
+    parsedModules[m.id] = { sections: [], ok: 0, warn: 0, err: 0 };
+  });
+
+  let currentModule  = null;
+  let currentSection = null;
+
+  // Helper: push line into current section
+  const pushLine = (type, icon, text) => {
+    if (!currentModule) return;
+    // Auto-create a default section for modules with no ▶ headers (e.g. Health Summary)
+    if (!currentSection) {
+      const def = MODULE_DEFS.find(m => m.id === currentModule);
+      currentSection = { name: def ? def.label : currentModule, lines: [] };
+      parsedModules[currentModule].sections.push(currentSection);
+    }
+    currentSection.lines.push({ type, icon, text });
+    if (type === 'ok')   parsedModules[currentModule].ok++;
+    if (type === 'warn') parsedModules[currentModule].warn++;
+    if (type === 'err')  parsedModules[currentModule].err++;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const l = raw.trim();
+
+    // ── Detect timestamp for run time
+    const tsMatch = l.match(/^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})/);
+    if (tsMatch && !runTimestamp) runTimestamp = tsMatch[1];
+
+    // ── Detect header block (═══ line, then module name, then ═══ line)
+    if (/^[═=]{10,}/.test(l)) {
+      // Peek next line for module name
+      const nameLine = lines[i + 1] ? lines[i + 1].trim().replace(/^\s+/, '') : '';
+      const cleanName = nameLine.replace(/[^a-zA-Z0-9 &\/\(\)]+/g, '').trim();
+      if (cleanName) {
+        for (const [rx, modId] of HEADER_MAP) {
+          if (rx.test(cleanName)) {
+            currentModule  = modId;
+            currentSection = null;
+            break;
+          }
+        }
+      }
+      continue;
+    }
+
+    // ── Detect section (▶ prefix or ── prefix)
+    if (/^[▶►]\s+/.test(l) || /^──\s+/.test(l)) {
+      const name = l.replace(/^[▶►─\s]+/, '').replace(/\s*──\s*$/, '').replace(/\(\d+\s+connections?\)/i, '').trim();
+      if (currentModule && name) {
+        currentSection = { name, lines: [] };
+        parsedModules[currentModule].sections.push(currentSection);
+      }
+      continue;
+    }
+
+    // ── Detect ok/warn/err lines
+    if (/^✔\s*/.test(l) || /^✓\s*/.test(l)) {
+      const text = l.replace(/^[✔✓]\s*/, '');
+      pushLine('ok', '✔', text);
+
+      // Health summary parsing
+      if (currentModule === 'health') {
+        healthChecks.push({ label: text, status: 'ok', value: '' });
+      }
+      continue;
+    }
+
+    if (/^⚠\s*/.test(l)) {
+      const text = l.replace(/^⚠\s*/, '');
+      pushLine('warn', '⚠', text);
+      if (currentModule === 'health') {
+        healthChecks.push({ label: text, status: 'warn', value: '' });
+      }
+      continue;
+    }
+
+    if (/^✖\s*/.test(l) || /^✗\s*/.test(l)) {
+      const text = l.replace(/^[✖✗]\s*/, '');
+      pushLine('err', '✖', text);
+      continue;
+    }
+
+    // ── Command line ($ prefix)
+    if (/^\$\s+/.test(l)) {
+      pushLine('cmd', '$', l.replace(/^\$\s*/, ''));
+      continue;
+    }
+
+    // ── Regular output
+    if (currentModule && l !== '') {
+      // Skip pure separator lines
+      if (/^[─═\-=]{10,}$/.test(l)) continue;
+      pushLine('out', '', l);
+    }
+  }
+
+  // Render
+  renderSidebar();
+  renderTopPills();
+  updateRunTs();
+
+  // Navigate to first module with data, or overview if none
+  const firstLoaded = MODULE_DEFS.slice(1).find(m => {
+    const p = parsedModules[m.id];
+    return p && (p.sections.length > 0 || p.ok > 0 || p.warn > 0 || p.err > 0);
+  });
+  activeModule = firstLoaded ? firstLoaded.id : 'overview';
+  showModule(activeModule);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SIDEBAR
+// ═══════════════════════════════════════════════════════════
+function renderSidebar(filter) {
+  const nav = document.getElementById('sidebarNav');
+  let count = 0;
+
+  nav.innerHTML = MODULE_DEFS.map(m => {
+    const label = m.label.toLowerCase();
+    const search = (filter || '').toLowerCase();
+    if (search && !label.includes(search) && !m.num.includes(search)) return '';
+
+    let badges = '';
+    if (m.id === 'overview') {
+      // total counts
+      let totOk = 0, totW = 0, totE = 0;
+      Object.values(parsedModules).forEach(p => { totOk += p.ok; totW += p.warn; totE += p.err; });
+      if (totOk || totW || totE) {
+        badges = `<div class="nav-badges">
+          ${totOk  ? `<span class="nbadge ok">${totOk}</span>`  : ''}
+          ${totW   ? `<span class="nbadge warn">${totW}</span>` : ''}
+          ${totE   ? `<span class="nbadge err">${totE}</span>`  : ''}
+        </div>`;
+      }
+    } else {
+      const p = parsedModules[m.id];
+      if (p && (p.ok || p.warn || p.err || p.sections.length)) {
+        count++;
+        badges = `<div class="nav-badges">
+          ${p.ok   ? `<span class="nbadge ok">${p.ok}</span>`   : ''}
+          ${p.warn ? `<span class="nbadge warn">${p.warn}</span>`  : ''}
+          ${p.err  ? `<span class="nbadge err">${p.err}</span>` : ''}
+        </div>`;
+      }
+    }
+
+    const isActive = m.id === activeModule;
+    return `<div class="nav-item ${isActive ? 'active' : ''}" data-id="${m.id}" onclick="showModule('${m.id}')">
+      <span class="nav-num">${m.num}</span>
+      <span class="nav-label">${m.label}</span>
+      ${badges}
+    </div>`;
+  }).join('');
+
+  document.getElementById('sidebarFooter').textContent = `${count} modules parsed`;
+}
+
+function filterNav(val) { renderSidebar(val); }
+
+// ═══════════════════════════════════════════════════════════
+//  TOP PILLS
+// ═══════════════════════════════════════════════════════════
+function renderTopPills() {
+  let totOk = 0, totW = 0, totE = 0;
+  Object.values(parsedModules).forEach(p => { totOk += p.ok; totW += p.warn; totE += p.err; });
+
+  const pills = document.getElementById('healthPills');
+  if (!totOk && !totW && !totE) {
+    pills.innerHTML = `<div class="hc-pill none"><span class="dot"></span>No Data</div>`;
+    return;
+  }
+
+  let html = '';
+  if (totOk)  html += `<div class="hc-pill ok"><span class="dot"></span>${totOk} OK</div>`;
+  if (totW)   html += `<div class="hc-pill warn"><span class="dot"></span>${totW} Warnings</div>`;
+  if (totE)   html += `<div class="hc-pill err"><span class="dot"></span>${totE} Errors</div>`;
+
+  // health summary specific pills
+  if (healthChecks.length) {
+    const hcWarn = healthChecks.filter(h => h.status === 'warn').length;
+    if (hcWarn === 0) html += `<div class="hc-pill ok"><span class="dot"></span>Health OK</div>`;
+    else html += `<div class="hc-pill warn"><span class="dot"></span>${hcWarn} Health Issues</div>`;
+  }
+
+  pills.innerHTML = html;
+}
+
+function updateRunTs() {
+  document.getElementById('runTs').textContent = runTimestamp || '—';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SHOW MODULE
+// ═══════════════════════════════════════════════════════════
+function showModule(id) {
+  activeModule = id;
+
+  // Update sidebar active state
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+
+  const view = document.getElementById('moduleView');
+
+  if (id === 'overview') {
+    renderOverview(view);
+    return;
+  }
+
+  const def = MODULE_DEFS.find(m => m.id === id);
+  const mod = parsedModules[id];
+
+  if (!mod || (mod.sections.length === 0 && mod.ok === 0 && mod.warn === 0 && mod.err === 0)) {
+    view.innerHTML = `
+      <div class="module-header">
+        <div class="module-title">${def ? def.icon + ' ' + def.label : id}</div>
+      </div>
+      <div class="empty-module" style="flex:1">
+        <div class="em-icon">📭</div>
+        <div class="em-text">No data for this module yet</div>
+      </div>`;
+    return;
+  }
+
+  // Special health summary view
+  if (id === 'health' && healthChecks.length > 0) {
+    renderHealthModule(view, def, mod);
+    return;
+  }
+
+  renderModuleView(view, def, mod);
+}
+
+// ── Standard module view
+function renderModuleView(view, def, mod) {
+  const totalLines = mod.sections.reduce((s, sec) => s + sec.lines.length, 0);
+
+  let html = `
+    <div class="module-header">
+      <div class="module-title">${def.icon} ${def.label}</div>
+      <div class="module-stats">
+        ${mod.ok   ? `<span class="mstat ok">✔ ${mod.ok}</span>` : ''}
+        ${mod.warn ? `<span class="mstat warn">⚠ ${mod.warn}</span>` : ''}
+        ${mod.err  ? `<span class="mstat err">✖ ${mod.err}</span>` : ''}
+        <span style="color:var(--text-dim);font-size:10px">${mod.sections.length} sections · ${totalLines} lines</span>
+      </div>
+    </div>
+    <div class="module-content">`;
+
+  mod.sections.forEach((sec, si) => {
+    const okC   = sec.lines.filter(l => l.type === 'ok').length;
+    const warnC = sec.lines.filter(l => l.type === 'warn').length;
+    const errC  = sec.lines.filter(l => l.type === 'err').length;
+
+    html += `<div class="section-block" id="sec-${def.id}-${si}">
+      <div class="section-header" onclick="toggleSection('sec-${def.id}-${si}')">
+        <span class="section-arrow">▼</span>
+        <span class="section-name">${esc(sec.name)}</span>
+        <div class="section-mini-badges">
+          ${okC   ? `<span class="nbadge ok">${okC}</span>` : ''}
+          ${warnC ? `<span class="nbadge warn">${warnC}</span>` : ''}
+          ${errC  ? `<span class="nbadge err">${errC}</span>` : ''}
+        </div>
+      </div>
+      <div class="section-body">`;
+
+    sec.lines.forEach(line => {
+      html += `<div class="line line-${line.type}">
+        <span class="line-icon">${line.icon}</span>
+        <span class="line-text">${esc(line.text)}</span>
+      </div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  view.innerHTML = html;
+}
+
+// ── Health summary view
+function renderHealthModule(view, def, mod) {
+  let html = `
+    <div class="module-header">
+      <div class="module-title">${def.icon} ${def.label}</div>
+      <div class="module-stats">
+        ${mod.ok   ? `<span class="mstat ok">✔ ${mod.ok}</span>` : ''}
+        ${mod.warn ? `<span class="mstat warn">⚠ ${mod.warn}</span>` : ''}
+        ${mod.err  ? `<span class="mstat err">✖ ${mod.err}</span>` : ''}
+      </div>
+    </div>
+    <div class="module-content">
+      <div class="health-grid">`;
+
+  // Health check cards
+  const hcDefs = [
+    { rx: /load average ok/i,        label: 'Load Average',     icon: '📈' },
+    { rx: /high load/i,              label: 'Load Average',     icon: '📈' },
+    { rx: /memory.*used|high memory/i,label: 'Memory Usage',    icon: '🧠' },
+    { rx: /disk.*at|all.*disks/i,    label: 'Disk Usage',       icon: '💾' },
+    { rx: /failed serv|no failed/i,  label: 'Services',         icon: '🔧' },
+    { rx: /zombie/i,                 label: 'Zombie Procs',     icon: '👻' },
+    { rx: /swap/i,                   label: 'Swap Usage',       icon: '🔄' },
+    { rx: /all checks/i,             label: 'Overall',          icon: '✅' },
+  ];
+
+  healthChecks.forEach(hc => {
+    const def2 = hcDefs.find(d => d.rx.test(hc.label)) || { label: 'Check', icon: '🔍' };
+    html += `<div class="health-card ${hc.status}">
+      <div class="hc-icon">${def2.icon}</div>
+      <div class="hc-info">
+        <div class="hc-label">${def2.label}</div>
+        <div class="hc-val">${esc(hc.label)}</div>
+      </div>
+    </div>`;
+  });
+
+  html += `</div>`;
+
+  // Also render raw sections below
+  if (mod.sections.length) {
+    html += `<div style="padding:0 20px 8px;border-top:1px solid var(--border);margin-top:8px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--text-dim);padding:10px 0 6px;font-weight:600">Raw Output</div></div>`;
+    mod.sections.forEach((sec, si) => {
+      const okC   = sec.lines.filter(l => l.type === 'ok').length;
+      const warnC = sec.lines.filter(l => l.type === 'warn').length;
+      html += `<div class="section-block" id="seche-${si}">
+        <div class="section-header" onclick="toggleSection('seche-${si}')">
+          <span class="section-arrow">▼</span>
+          <span class="section-name">${esc(sec.name)}</span>
+          <div class="section-mini-badges">
+            ${okC   ? `<span class="nbadge ok">${okC}</span>` : ''}
+            ${warnC ? `<span class="nbadge warn">${warnC}</span>` : ''}
+          </div>
+        </div>
+        <div class="section-body">
+          ${sec.lines.map(line => `<div class="line line-${line.type}"><span class="line-icon">${line.icon}</span><span class="line-text">${esc(line.text)}</span></div>`).join('')}
+        </div></div>`;
+    });
+  }
+
+  html += `</div>`;
+  view.innerHTML = html;
+}
+
+// ── Overview grid
+function renderOverview(view) {
+  const anyData = Object.values(parsedModules).some(m => m.sections.length > 0);
+
+  let html = `
+    <div class="module-header">
+      <div class="module-title">🗺 All Modules</div>
+      <div class="module-stats">
+        <span style="color:var(--text-dim);font-size:10px">Click a card to view module</span>
+      </div>
+    </div>`;
+
+  if (!anyData) {
+    html += `<div class="empty-module" style="flex:1">
+      <div class="em-icon">🔬</div>
+      <div class="em-text">Paste script output below &amp; click Parse</div>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="loadSample()">Load Sample Data</button>
+    </div>`;
+    view.innerHTML = html;
+    return;
+  }
+
+  html += `<div class="module-content"><div class="overview-grid">`;
+
+  MODULE_DEFS.slice(1).forEach(m => {
+    const mod = parsedModules[m.id];
+    let cls = 'no-data';
+    let bHtml = `<span class="ov-b nd">no data</span>`;
+
+    if (mod && (mod.ok || mod.warn || mod.err || mod.sections.length)) {
+      if (mod.err > 0)       cls = 'has-err';
+      else if (mod.warn > 0) cls = 'has-warn';
+      else if (mod.ok > 0)   cls = 'all-ok';
+
+      bHtml = `
+        ${mod.ok   ? `<span class="ov-b ok">✔ ${mod.ok}</span>` : ''}
+        ${mod.warn ? `<span class="ov-b warn">⚠ ${mod.warn}</span>` : ''}
+        ${mod.err  ? `<span class="ov-b err">✖ ${mod.err}</span>` : ''}
+      `;
+      if (!mod.ok && !mod.warn && !mod.err) bHtml = `<span class="ov-b nd">${mod.sections.length} sec</span>`;
+    }
+
+    html += `<div class="ov-card ${cls}" onclick="showModule('${m.id}')">
+      <div class="ov-num">${m.icon} ${m.num}</div>
+      <div class="ov-title">${m.label}</div>
+      <div class="ov-badges">${bHtml}</div>
+    </div>`;
+  });
+
+  html += `</div></div>`;
+  view.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TOGGLE SECTION COLLAPSE
+// ═══════════════════════════════════════════════════════════
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('collapsed');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TOGGLE INPUT PANEL
+// ═══════════════════════════════════════════════════════════
+function toggleInput() {
+  document.getElementById('inputSection').classList.toggle('expanded');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════════
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function triggerParse() {
+  parseLog();
+  // Collapse input after parse
+  document.getElementById('inputSection').classList.remove('expanded');
+}
+
+function clearAll() {
+  parsedModules = {};
+  healthChecks  = [];
+  runTimestamp  = null;
+  activeModule  = 'overview';
+  document.getElementById('logInput').value = '';
+  resetDropZone();
+  document.getElementById('healthPills').innerHTML = `<div class="hc-pill none"><span class="dot"></span>No Data</div>`;
+  document.getElementById('runTs').textContent = '—';
+  renderSidebar();
+  document.getElementById('moduleView').innerHTML = `
+    <div class="empty-module" id="emptyState">
+      <div class="em-icon">🔬</div>
+      <div class="em-text">Paste script output below &amp; click Parse</div>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="loadSample()">Load Sample Data</button>
+    </div>`;
+  document.getElementById('inputSection').classList.add('expanded');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SAMPLE DATA
+// ═══════════════════════════════════════════════════════════
+function loadSample() {
+  document.getElementById('logInput').value = `
+════════════════════════════════════════
+  SYSTEM OVERVIEW
+════════════════════════════════════════
+
+▶ OS & Kernel
+$ uname -a
+Linux protohub 6.8.0-51-generic #52-Ubuntu SMP PREEMPT_DYNAMIC Thu Dec  5 13:09:44 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+$ cat /etc/os-release
+NAME="Ubuntu"
+VERSION="24.04.1 LTS (Noble Numbat)"
+ID=ubuntu
+
+▶ Uptime & Load
+$ uptime -p
+up 3 days, 14 hours, 22 minutes
+$ cat /proc/loadavg
+0.45 0.61 0.58 2/412 29814
+
+▶ Date / Time / Timezone
+$ date
+Fri Jan 17 14:30:22 UTC 2025
+$ timedatectl
+               Local time: Fri 2025-01-17 14:30:22 UTC
+           Universal time: Fri 2025-01-17 14:30:22 UTC
+                 RTC time: Fri 2025-01-17 14:30:21
+                Time zone: UTC (UTC, +0000)
+
+▶ System Limits
+$ ulimit -a
+core file size          (blocks, -c) 0
+data seg size           (kbytes, -d) unlimited
+open files                      (-n) 1048576
+
+════════════════════════════════════════
+  CPU & MEMORY
+════════════════════════════════════════
+
+▶ CPU Info
+$ lscpu
+Architecture:            x86_64
+Model name:              Intel(R) Core(TM) i7-12700K CPU @ 3.60GHz
+CPU(s):                  20
+Thread(s) per core:      2
+
+▶ Memory
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            31Gi        18Gi       2.1Gi       512Mi        11Gi        12Gi
+Swap:          8.0Gi          0B       8.0Gi
+
+▶ OOM Killer History
+✔ No OOM kill events found in kernel log
+
+▶ Top Memory Consumers (RSS)
+$ ps aux --sort=-%mem | head -15
+USER       PID  %CPU %MEM    VSZ   RSS COMMAND
+brian     9784   2.1  2.3 2048000 756000 chrome
+brian    15757   1.8  1.9 1048576 620000 chrome
+root      1234   0.1  0.8  512000 250000 dockerd
+
+════════════════════════════════════════
+  DISK & FILESYSTEM
+════════════════════════════════════════
+
+▶ Disk Usage
+$ df -hT
+Filesystem     Type      Size  Used Avail Use% Mounted on
+/dev/sda1      ext4      458G  182G  253G  42% /
+/dev/sdb1      ext4      1.8T  1.2T  512G  71% /data
+/dev/nvme0n1p1 vfat      511M  6.1M  505M   2% /boot/efi
+tmpfs          tmpfs      16G  1.1G   15G   7% /dev/shm
+
+▶ Inode Usage
+$ df -i
+Filesystem      Inodes  IUsed   IFree IUse% Mounted on
+/dev/sda1      30277632 812445 29465187    3% /
+/dev/sdb1     122101760 2845120 119256640    2% /data
+
+▶ Large Files (>100MB in /)
+$ find / -xdev -size +100M
+/var/lib/docker/overlay2/abc123/diff/large_image.img
+/home/brian/Downloads/ubuntu-24.04-desktop.iso
+/var/log/journal/old/system@001.journal
+
+▶ SMART Status (if available)
+⚠ smartctl not found — install smartmontools
+
+════════════════════════════════════════
+  NETWORK
+════════════════════════════════════════
+
+▶ Interfaces
+$ ip -br addr
+lo               UNKNOWN        127.0.0.1/8 ::1/128
+eno1             UP             192.168.1.100/24
+docker0          UP             172.17.0.1/16
+cni0             UP             10.42.0.1/24
+
+▶ DNS Configuration
+$ cat /etc/resolv.conf
+nameserver 192.168.1.1
+nameserver 8.8.8.8
+search local.lan
+
+▶ Connection State Summary
+Count by state:
+  ESTABLISHED          47
+  TIME_WAIT            12
+  CLOSE_WAIT            3
+  LISTEN               28
+
+▶ Firewall (iptables)
+⚠ Firewall rules require root
+
+▶ Connectivity Tests
+✔ ping OK: 8.8.8.8
+✔ ping OK: 1.1.1.1
+
+════════════════════════════════════════
+  PROCESSES
+════════════════════════════════════════
+
+▶ Zombie Processes
+Zombie count: 0
+✔ No zombie processes detected
+
+▶ Process Snapshot (top 30 CPU)
+$ ps aux --sort=-%cpu | head -30
+USER       PID %CPU %MEM COMMAND
+root      1234  2.3  0.8 dockerd
+brian     9784  1.9  2.3 chrome
+brian    15757  1.4  1.9 chrome
+
+════════════════════════════════════════
+  SYSTEM LOGS
+════════════════════════════════════════
+
+▶ Kernel Ring Buffer (dmesg)
+$ dmesg --level=err,warn
+[  12.445] ACPI Warning: SystemIO range 0x0000000000000428-0x000000000000042F conflicts
+[  14.221] usb 1-2: Unable to enumerate USB device on port 3
+⚠ 2 kernel warnings found
+
+▶ Recent Journal Errors
+✖ Failed unit: nvidia-persistenced.service — NVIDIA Persistence Daemon
+$ journalctl -p err..emerg -n 50
+Jan 17 08:12:34 protohub kernel: EXT4-fs error (device sda1): ...
+Jan 17 11:45:02 protohub dockerd: Error response from daemon: ...
+
+▶ Failed Logins
+$ lastb
+brian    ssh:notty    192.168.1.50     Thu Jan 16 22:14 - 22:14  (00:00)
+brian    ssh:notty    192.168.1.50     Thu Jan 16 22:13 - 22:13  (00:00)
+
+════════════════════════════════════════
+  SERVICES & SYSTEMD
+════════════════════════════════════════
+
+▶ Failed Units
+$ systemctl --failed
+  UNIT                          LOAD   ACTIVE SUB    DESCRIPTION
+● nvidia-persistenced.service   loaded failed failed NVIDIA Persistence Daemon
+✖ 1 failed unit detected
+
+▶ All Active Services
+$ systemctl list-units --type=service --state=running
+  docker.service     loaded active running Docker Application Container Engine
+  ssh.service        loaded active running OpenBSD Secure Shell server
+  k3s.service        loaded active running Lightweight Kubernetes
+  cloudflared.service loaded active running Cloudflare Tunnel
+✔ Core services running normally
+
+▶ Timers
+$ systemctl list-timers
+NEXT                         LEFT          LAST                         PASSED       UNIT
+Fri 2025-01-17 15:00:00 UTC  28min left    Fri 2025-01-17 14:00:00 UTC  29min ago    apt-daily.timer
+
+════════════════════════════════════════
+  HARDWARE
+════════════════════════════════════════
+
+▶ CPU Temperature
+$ sensors
+coretemp-isa-0000
+Core 0:         +52.0°C  (high = +100.0°C, crit = +100.0°C)
+Core 2:         +49.0°C  (high = +100.0°C, crit = +100.0°C)
+Core 4:         +51.0°C  (high = +100.0°C, crit = +100.0°C)
+✔ CPU temperatures nominal
+
+▶ GPU (NVIDIA)
+$ nvidia-smi
+⚠ nvidia-smi not found — driver not loaded
+
+▶ PCI Devices
+$ lspci
+00:00.0 Host bridge: Intel Corporation 12th Gen Core Processor Host Bridge
+01:00.0 VGA compatible controller: NVIDIA Corporation GA104 [GeForce RTX 3070]
+02:00.0 Non-Volatile memory controller: Samsung Electronics Co Ltd NVMe SSD
+
+════════════════════════════════════════
+  SECURITY
+════════════════════════════════════════
+
+▶ SSH Configuration
+$ sshd -T | grep -E 'permitroot|passwordauth'
+permitrootlogin no
+passwordauthentication no
+✔ Root login disabled
+✔ Password auth disabled (key-only)
+
+▶ AppArmor
+$ apparmor_status
+apparmor module is loaded.
+34 profiles are loaded.
+34 profiles are in enforce mode.
+✔ AppArmor active in enforce mode
+
+▶ SELinux
+⚠ SELinux not present
+
+▶ Fail2ban
+$ fail2ban-client status
+Status
+|- Number of jail:	3
+\`- Jail list: sshd, nginx-http-auth, cloudflare
+✔ fail2ban running with 3 active jails
+
+════════════════════════════════════════
+  CONTAINERS (Docker / Podman)
+════════════════════════════════════════
+
+▶ Docker Version
+$ docker version
+Client: Docker Engine - Community
+ Version:           27.3.1
+
+▶ Running Containers
+$ docker ps
+CONTAINER ID   IMAGE                    STATUS         NAMES
+a1b2c3d4e5f6   cloudflare/cloudflared   Up 3 days      cloudflared
+b2c3d4e5f6a1   louislam/uptime-kuma     Up 3 days      uptime-kuma
+c3d4e5f6a1b2   kasmweb/core             Up 2 days      kasm
+
+▶ Docker Disk Usage
+$ docker system df
+TYPE            TOTAL   ACTIVE   SIZE      RECLAIMABLE
+Images          18      6        14.2GB    8.1GB (57%)
+Containers      6       6        24.3MB    0B (0%)
+Local Volumes   12      8        2.3GB     512MB (22%)
+⚠ 8.1GB of Docker images reclaimable — consider docker system prune
+
+════════════════════════════════════════
+  KUBERNETES / k3s
+════════════════════════════════════════
+
+▶ Node Status
+$ k3s kubectl get nodes -o wide
+NAME         STATUS   ROLES                  AGE    VERSION        INTERNAL-IP
+protohub     Ready    control-plane,master   45d    v1.31.3+k3s1   192.168.1.100
+pi-node-01   Ready    <none>                 45d    v1.31.3+k3s1   192.168.1.101
+pi-node-02   Ready    <none>                 45d    v1.31.3+k3s1   192.168.1.102
+pi-node-03   Ready    <none>                 44d    v1.31.3+k3s1   192.168.1.103
+✔ All 4 nodes Ready
+
+▶ Failed / Pending Pods
+$ k3s kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded
+No resources found.
+✔ No failed or pending pods
+
+▶ Recent Events (Warnings)
+$ k3s kubectl get events -A | grep -i warning
+Warning  BackOff  pod/alertmanager-0  Back-off restarting failed container
+⚠ 1 warning event in cluster
+
+════════════════════════════════════════
+  DNS DIAGNOSTICS
+════════════════════════════════════════
+
+▶ DNS Lookup Tests
+→ google.com
+✔ dig OK: google.com
+→ cloudflare.com
+✔ dig OK: cloudflare.com
+→ pi-node-01
+✔ dig OK: pi-node-01
+
+▶ Reverse DNS
+$ dig -x 8.8.8.8 +short
+dns.google.
+
+════════════════════════════════════════
+  PERFORMANCE PROFILING
+════════════════════════════════════════
+
+▶ Load Average History
+$ uptime
+ 14:30:22 up 3 days, 14:22,  2 users,  load average: 0.45, 0.61, 0.58
+✔ Load within normal range
+
+▶ CPU Frequency Scaling
+$ cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+performance
+
+▶ Network Latency
+$ ping -c 5 8.8.8.8
+--- 8.8.8.8 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss
+rtt min/avg/max/mdev = 11.234/12.891/15.442/1.523 ms
+✔ Network latency nominal (avg 12.9ms)
+
+════════════════════════════════════════
+  KERNEL & BOOT
+════════════════════════════════════════
+
+▶ Kernel Taint Flags
+$ cat /proc/sys/kernel/tainted
+0
+(0 = clean; non-zero = tainted — check kernel docs for flags)
+✔ Kernel is clean (untainted)
+
+▶ Loaded Modules
+$ lsmod | wc -l
+89
+$ lsmod | sort
+Module                  Size  Used by
+ahci                   40960  0
+bluetooth             786432  8 bnep,btusb
+
+▶ Boot Parameters
+$ cat /proc/cmdline
+BOOT_IMAGE=/boot/vmlinuz-6.8.0-51-generic root=/dev/sda1 ro quiet splash
+
+════════════════════════════════════════
+  QUICK HEALTH SUMMARY
+════════════════════════════════════════
+
+▶ Health Checks
+✔ Load average OK: 0.45
+✔ Memory: 58% used
+✔ All monitored disks have sufficient space
+✖ FAILED SERVICES: 1
+✔ No zombie processes
+✔ Swap usage nominal
+`;
+  triggerParse();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILE UPLOAD
+// ═══════════════════════════════════════════════════════════
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+}
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('logInput').value = e.target.result;
+    setDropFileInfo(file.name);
+    triggerParse();
+  };
+  reader.onerror = () => {
+    setDropError('Failed to read file');
+  };
+  reader.readAsText(file);
+}
+
+function setDropFileInfo(name) {
+  document.getElementById('dropText').style.display     = 'none';
+  const info = document.getElementById('dropFileInfo');
+  info.classList.add('visible');
+  document.getElementById('dropFileName').textContent = name;
+}
+
+function setDropError(msg) {
+  const text = document.getElementById('dropText');
+  text.style.display = '';
+  text.innerHTML = `<span style="color:var(--red)">${msg}</span>`;
+}
+
+function resetDropZone() {
+  document.getElementById('dropText').style.display = '';
+  document.getElementById('dropText').innerHTML = 'Drop log file here or <span>click to browse</span> &nbsp;·&nbsp; .log / .txt';
+  const info = document.getElementById('dropFileInfo');
+  info.classList.remove('visible');
+  document.getElementById('fileInput').value = '';
+}
+
+// Drag-and-drop events
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('dropTarget');
+
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  });
+  zone.addEventListener('dragleave', () => {
+    zone.classList.remove('drag-over');
+  });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+renderSidebar();
+showModule('overview');
+</script>
+</body>
+</html>
+`.trim()
