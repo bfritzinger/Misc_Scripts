@@ -3,7 +3,7 @@
 **Version:** 2.1.0  
 **Compatibility:** Any Linux distro with bash 4.2+ (Debian/Ubuntu, RHEL/CentOS/Fedora, Arch, Raspberry Pi OS, etc.)
 
-A single-file bash script that performs a comprehensive system health check and simultaneously exports every measured value to a **CSV** (for trend analysis) and a **JSON snapshot** (for tooling integration). Run it on a schedule and pipe the CSV into pandas, Grafana, Excel, or gnuplot to watch metrics evolve over time.
+A single-file bash script that performs a comprehensive system health check and simultaneously exports every measured value to a **CSV** (for trend analysis) and a **JSON snapshot** (for tooling integration). Run it on a schedule and pipe the CSV into pandas, Grafana, Excel, or gnuplot to watch metrics evolve over time. Includes a dashboard html file to graphically view metrics.csv. 
 
 ---
 
@@ -67,6 +67,70 @@ Each run produces a complete JSON object with all metrics. Numeric values are st
   "tcp_time_wait": 17,
   ...
 }
+```
+
+---
+
+## Metrics Viewer
+
+`metrics-dashboard.html` is a standalone, zero-install browser dashboard for visualising the CSV produced by this script. Download the file, open it in any modern browser, and drop your `metrics.csv` onto the upload screen — no web server, no Node.js, no build step required.
+
+### Features
+
+| Tab | What you see |
+|---|---|
+| **Overview** | Host identity, overall check status (CRITICAL / WARNING / OK), CPU load gauges, memory, root disk, and process/socket summary |
+| **Trends** | Chart.js line graphs across all CSV rows — CPU utilisation, load averages, memory breakdown, temperatures, disk usage, network RX/TX, TCP connections, and health check results over time |
+| **CPU & Temps** | Per-category utilisation gauges, load/frequency/governor table, and a full temperature sensor grid colour-coded by threshold |
+| **Memory** | RAM and swap gauges with buffer/cache/slab breakdown, file descriptor utilisation |
+| **Disk & I/O** | Per-mount usage gauges (root, boot, EFI, NAS), NVMe and HDD I/O counters, SMART status, inode health |
+| **Network** | TCP/UDP state breakdown, per-interface table (state, speed, RX/TX MB, packets, errors, drops) |
+| **Security** | SSH config flags, UFW firewall status, systemd failed units, OOM kills, zombie/D-state processes |
+| **Raw Data** | Filterable column/value table with row selector for comparing individual snapshots |
+
+### Trend analysis
+
+The **Trends** tab activates automatically when the CSV contains two or more rows. A summary bar at the top shows snapshot count, time span, average CPU busy, and average memory used. All graphs plot the full history in the file — load a CSV with weeks of 5-minute samples to see long-term degradation patterns at a glance.
+
+Graphs included:
+
+- CPU utilisation % (busy, I/O wait, idle)
+- System load averages (1 m / 5 m / 15 m)
+- Memory usage % and GB breakdown (used / available / cached)
+- CPU package temp and NVMe composite temp
+- Per-core temperatures
+- Root and NAS disk usage %
+- Network cumulative RX/TX MB (primary interface)
+- Process and thread counts
+- TCP connection states (established / listen / time-wait)
+- Health check results (passed / warnings / criticals)
+
+### Usage
+
+```bash
+# Copy the dashboard file to the same host or any machine with browser access
+scp metrics-dashboard.html user@host:~/
+
+# Or just keep it local — it reads the CSV via a file-picker, not a server path
+```
+
+1. Open `metrics-dashboard.html` in Chrome, Firefox, or Edge.
+2. Click the upload zone or drag your `metrics.csv` onto it.
+3. Navigate tabs to explore the current snapshot; switch to **Trends** to view graphs over time.
+4. Use the **Snapshot** selector in the header (non-Trends tabs) to flip between individual rows.
+5. Click **↑ Load** in the header to load a different file.
+
+### Extracting a date range for focused analysis
+
+The CSV is plain text — trim it with standard tools before loading for a focused time window:
+
+```bash
+# Build a file with the header + rows from the last 24 hours
+HEAD=$(head -1 /var/log/sys_health/metrics.csv)
+CUTOFF=$(date -d '24 hours ago' +%s)
+echo "$HEAD" > /tmp/last_24h.csv
+awk -F, -v cut="$CUTOFF" 'NR>1 && $1>=cut' /var/log/sys_health/metrics.csv >> /tmp/last_24h.csv
+# Load /tmp/last_24h.csv in the viewer
 ```
 
 ---
@@ -422,6 +486,10 @@ Indexed by sensor order (0, 1, 2, …).
 ---
 
 ## Trend Analysis Examples
+
+### Metrics Viewer (no code required)
+
+The fastest path to trend graphs is the included `metrics-dashboard.html` — open it in a browser, drop in `metrics.csv`, and navigate to the **Trends** tab. See the [Metrics Viewer](#metrics-viewer) section above for full details.
 
 ### Python / pandas
 
