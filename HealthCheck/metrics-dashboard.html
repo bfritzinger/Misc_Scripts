@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SYSMON · Metrics Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #060d14; font-family: 'IBM Plex Mono', 'Courier New', monospace; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0a1118; }
+    ::-webkit-scrollbar-thumb { background: #1e2d3d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2e4d6d; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useCallback, useRef, useEffect, useMemo } = React;
+
+    // ── CSV Parser ────────────────────────────────────────────────────────────
+    const parseCSV = (text) => {
+      const lines = text.trim().split("\n");
+      const headers = lines[0].split(",");
+      return lines.slice(1).map((line) => {
+        const vals = [];
+        let cur = "", inQ = false;
+        for (const ch of line) {
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === "," && !inQ) { vals.push(cur); cur = ""; }
+          else cur += ch;
+        }
+        vals.push(cur);
+        const row = {};
+        headers.forEach((h, i) => { row[h.trim()] = vals[i]?.trim() ?? ""; });
+        return row;
+      });
+    };
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    const num = (v) => parseFloat(v) || 0;
+    const fmt = (v, d = 1) => typeof v === "number" ? v.toFixed(d) : parseFloat(v).toFixed(d);
+    const fmtMB = (mb) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+    const fmtUptime = (s) => {
+      const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+      return d ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`;
+    };
+    const shortTs = (ts) => {
+      if (!ts) return "";
+      const parts = ts.split(" ");
+      return parts[1] ? parts[1].substring(0, 5) : ts;
+    };
+
+    // ── Chart.js defaults ─────────────────────────────────────────────────────
+    Chart.defaults.color = "#5a7a8a";
+    Chart.defaults.borderColor = "#1e2d3d";
+    Chart.defaults.font.family = "'IBM Plex Mono', 'Courier New', monospace";
+    Chart.defaults.font.size = 10;
+
+    // ── LineChart component ───────────────────────────────────────────────────
+    const LineChart = ({ labels, datasets, title, yMax, yLabel = "", height = 180 }) => {
+      const canvasRef = useRef(null);
+      const chartRef = useRef(null);
+
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        if (chartRef.current) chartRef.current.destroy();
+
+        chartRef.current = new Chart(canvasRef.current, {
+          type: "line",
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            plugins: {
+              legend: {
+                display: datasets.length > 1,
+                position: "top",
+                labels: { color: "#8899aa", boxWidth: 12, padding: 12, font: { size: 10 } },
+              },
+              tooltip: {
+                backgroundColor: "#0d1821",
+                borderColor: "#1e2d3d",
+                borderWidth: 1,
+                titleColor: "#c8f542",
+                bodyColor: "#cde",
+                padding: 10,
+              },
+            },
+            scales: {
+              x: {
+                grid: { color: "#111d26" },
+                ticks: { color: "#5a7a8a", maxRotation: 0 },
+              },
+              y: {
+                grid: { color: "#111d26" },
+                ticks: { color: "#5a7a8a", callback: (v) => `${v}${yLabel}` },
+                ...(yMax !== undefined ? { max: yMax } : {}),
+                min: 0,
+              },
+            },
+          },
+        });
+        return () => { if (chartRef.current) chartRef.current.destroy(); };
+      }, [labels, datasets, yMax, yLabel]);
+
+      return (
+        <div style={{ background: "#0d1821", border: "1px solid #1e2d3d", borderTop: "2px solid #1e3a55", padding: "14px 16px" }}>
+          {title && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "#5a9abf", textTransform: "uppercase", marginBottom: 12 }}>{title}</div>}
+          <div style={{ height }}>
+            <canvas ref={canvasRef} />
+          </div>
+        </div>
+      );
+    };
+
+    // ── Trend dataset builder ─────────────────────────────────────────────────
+    const ds = (label, data, color, fill = false) => ({
+      label,
+      data,
+      borderColor: color,
+      backgroundColor: fill ? `${color}22` : "transparent",
+      fill,
+      tension: 0.3,
+      pointRadius: data.length <= 10 ? 4 : 2,
+      pointHoverRadius: 6,
+      borderWidth: 2,
+      pointBackgroundColor: color,
+    });
+
+    // ── Trends Panel ──────────────────────────────────────────────────────────
+    const TrendsPanel = ({ rows }) => {
+      const labels = rows.map(r => shortTs(r.timestamp_human));
+
+      // CPU
+      const cpuBusy   = rows.map(r => +(num(r.cpu_user_pct) + num(r.cpu_sys_pct)).toFixed(2));
+      const cpuIdle   = rows.map(r => +num(r.cpu_idle_pct).toFixed(2));
+      const cpuIowait = rows.map(r => +num(r.cpu_iowait_pct).toFixed(2));
+      const load1m    = rows.map(r => +num(r.load_1m).toFixed(2));
+      const load5m    = rows.map(r => +num(r.load_5m).toFixed(2));
+      const load15m   = rows.map(r => +num(r.load_15m).toFixed(2));
+
+      // Memory
+      const memPct  = rows.map(r => +num(r.mem_used_pct).toFixed(2));
+      const swapPct = rows.map(r => +num(r.swap_used_pct).toFixed(2));
+      const memUsedMB  = rows.map(r => +(num(r.mem_used_mb) / 1024).toFixed(2));
+      const memAvailMB = rows.map(r => +(num(r.mem_avail_mb) / 1024).toFixed(2));
+      const memCacheMB = rows.map(r => +(num(r.mem_cached_mb) / 1024).toFixed(2));
+
+      // Disk
+      const diskRootPct = rows.map(r => +num(r.disk_root_used_pct).toFixed(2));
+      const diskNasPct  = rows.map(r => +num(r.disk_nas_used_pct).toFixed(2));
+
+      // Temps — find Package_id_0 or first valid sensor
+      const tempPkg = rows.map(r => {
+        for (let i = 0; i <= 21; i++) {
+          const lbl = r[`temp_${i}_label`] || "";
+          if (lbl.toLowerCase().includes("package") || lbl.toLowerCase().includes("pkg")) {
+            const c = parseFloat(r[`temp_${i}_c`]);
+            return isNaN(c) ? null : +c.toFixed(1);
+          }
+        }
+        return null;
+      });
+      const tempComposite = rows.map(r => {
+        for (let i = 0; i <= 21; i++) {
+          const lbl = r[`temp_${i}_label`] || "";
+          if (lbl.toLowerCase().includes("composite")) {
+            const c = parseFloat(r[`temp_${i}_c`]);
+            return isNaN(c) ? null : +c.toFixed(1);
+          }
+        }
+        return null;
+      });
+      const coreTemps = [0,4,8,12,16,20].map(coreNum => ({
+        label: `Core ${coreNum}`,
+        vals: rows.map(r => {
+          for (let i = 0; i <= 21; i++) {
+            const lbl = r[`temp_${i}_label`] || "";
+            if (lbl === `Core_${coreNum}`) {
+              const c = parseFloat(r[`temp_${i}_c`]);
+              return isNaN(c) ? null : +c.toFixed(1);
+            }
+          }
+          return null;
+        }),
+      })).filter(ct => ct.vals.some(v => v !== null));
+
+      // Network — primary iface enp43s0
+      const rxMB = rows.map(r => +num(r.net_enp43s0_rx_mb).toFixed(1));
+      const txMB = rows.map(r => +num(r.net_enp43s0_tx_mb).toFixed(1));
+
+      // Processes & TCP
+      const procs   = rows.map(r => +num(r.proc_total));
+      const threads = rows.map(r => +num(r.proc_threads));
+      const tcpEst  = rows.map(r => +num(r.tcp_established));
+      const tcpTw   = rows.map(r => +num(r.tcp_time_wait));
+      const tcpListen = rows.map(r => +num(r.tcp_listen));
+
+      // Check results
+      const warnings  = rows.map(r => +num(r.result_warnings));
+      const criticals = rows.map(r => +num(r.result_criticals));
+      const passed    = rows.map(r => +num(r.result_checks_passed));
+
+      // Palette
+      const P = ["#c8f542","#42b4f5","#f5a742","#f54242","#a742f5","#42f5a7","#f542b4","#f5f542"];
+
+      const corePalette = ["#42f5a7","#42b4f5","#f5a742","#f54242","#a742f5","#c8f542"];
+
+      if (rows.length < 2) {
+        return (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#5a7a8a", fontSize: 13 }}>
+            Load a CSV with 2 or more rows to see trend graphs.
+          </div>
+        );
+      }
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Summary row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+            {[
+              { label: "Snapshots", value: rows.length },
+              { label: "Time Span", value: (() => {
+                const t0 = num(rows[0].timestamp_epoch), t1 = num(rows[rows.length-1].timestamp_epoch);
+                const diff = Math.abs(t1-t0);
+                if (diff < 3600) return `${Math.round(diff/60)}m`;
+                if (diff < 86400) return `${(diff/3600).toFixed(1)}h`;
+                return `${(diff/86400).toFixed(1)}d`;
+              })() },
+              { label: "Avg CPU Busy", value: `${(cpuBusy.reduce((a,b)=>a+b,0)/cpuBusy.length).toFixed(1)}%` },
+              { label: "Avg Mem Used", value: `${(memPct.reduce((a,b)=>a+b,0)/memPct.length).toFixed(1)}%` },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: "#0d1821", border: "1px solid #1e2d3d", borderTop: "2px solid #c8f542", padding: "12px 16px" }}>
+                <div style={{ fontSize: 10, color: "#5a7a8a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#c8f542" }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* CPU */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <LineChart
+              title="CPU Utilization %"
+              labels={labels}
+              datasets={[
+                ds("Busy (user+sys)", cpuBusy, "#c8f542", true),
+                ds("I/O Wait", cpuIowait, "#f5a742"),
+                ds("Idle", cpuIdle, "#1e4a35"),
+              ]}
+              yMax={100}
+              yLabel="%"
+              height={200}
+            />
+            <LineChart
+              title="System Load Average"
+              labels={labels}
+              datasets={[
+                ds("1m", load1m, "#c8f542"),
+                ds("5m", load5m, "#42b4f5"),
+                ds("15m", load15m, "#f5a742"),
+              ]}
+              yLabel=""
+              height={200}
+            />
+          </div>
+
+          {/* Memory */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <LineChart
+              title="Memory Usage %"
+              labels={labels}
+              datasets={[
+                ds("RAM Used %", memPct, "#42b4f5", true),
+                ds("Swap Used %", swapPct, "#f54242"),
+              ]}
+              yMax={100}
+              yLabel="%"
+              height={200}
+            />
+            <LineChart
+              title="Memory Breakdown (GB)"
+              labels={labels}
+              datasets={[
+                ds("Used", memUsedMB, "#42b4f5", true),
+                ds("Available", memAvailMB, "#42f5a7"),
+                ds("Cached", memCacheMB, "#f5a742"),
+              ]}
+              yLabel=" GB"
+              height={200}
+            />
+          </div>
+
+          {/* Temps */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <LineChart
+              title="CPU Package & NVMe Temp (°C)"
+              labels={labels}
+              datasets={[
+                ...(tempPkg.some(v=>v!==null) ? [ds("CPU Package", tempPkg, "#f54242")] : []),
+                ...(tempComposite.some(v=>v!==null) ? [ds("NVMe Composite", tempComposite, "#f5a742")] : []),
+              ]}
+              yLabel="°C"
+              height={200}
+            />
+            <LineChart
+              title="CPU Core Temps (°C)"
+              labels={labels}
+              datasets={coreTemps.map((ct, i) => ds(ct.label, ct.vals, corePalette[i % corePalette.length]))}
+              yLabel="°C"
+              height={200}
+            />
+          </div>
+
+          {/* Disk */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <LineChart
+              title="Disk Usage %"
+              labels={labels}
+              datasets={[
+                ds("Root /", diskRootPct, "#a742f5"),
+                ...(diskNasPct.some(v=>v>0) ? [ds("NAS", diskNasPct, "#42f5a7")] : []),
+              ]}
+              yMax={100}
+              yLabel="%"
+              height={180}
+            />
+            <LineChart
+              title="Network — enp43s0 Cumulative (MB)"
+              labels={labels}
+              datasets={[
+                ds("RX MB", rxMB, "#42b4f5", true),
+                ds("TX MB", txMB, "#c8f542"),
+              ]}
+              yLabel=" MB"
+              height={180}
+            />
+          </div>
+
+          {/* Processes & TCP */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <LineChart
+              title="Processes & Threads"
+              labels={labels}
+              datasets={[
+                ds("Processes", procs, "#f542b4"),
+                ds("Threads", threads, "#f5a742"),
+              ]}
+              height={180}
+            />
+            <LineChart
+              title="TCP Connections"
+              labels={labels}
+              datasets={[
+                ds("Established", tcpEst, "#42f5a7"),
+                ds("Listen", tcpListen, "#42b4f5"),
+                ds("Time Wait", tcpTw, "#f54242"),
+              ]}
+              height={180}
+            />
+          </div>
+
+          {/* Check results */}
+          <LineChart
+            title="Health Check Results Over Time"
+            labels={labels}
+            datasets={[
+              ds("Passed", passed, "#42f573"),
+              ds("Warnings", warnings, "#ffaa00"),
+              ds("Criticals", criticals, "#ff4444"),
+            ]}
+            height={160}
+          />
+
+        </div>
+      );
+    };
+
+    // ── Shared UI ─────────────────────────────────────────────────────────────
+    const StatusBadge = ({ status }) => {
+      const cfg = {
+        CRITICAL: { bg: "#ff3a3a22", border: "#ff3a3a", text: "#ff6b6b" },
+        WARNING:  { bg: "#ffaa0022", border: "#ffaa00", text: "#ffcc44" },
+        OK:       { bg: "#42f57322", border: "#42f573", text: "#42f573" },
+        PASSED:   { bg: "#42f57322", border: "#42f573", text: "#42f573" },
+      };
+      const c = cfg[status] || { bg: "#ffffff11", border: "#555", text: "#aaa" };
+      return (
+        <span style={{
+          background: c.bg, border: `1px solid ${c.border}`, color: c.text,
+          padding: "2px 10px", borderRadius: 2, fontSize: 11, fontWeight: 700,
+          letterSpacing: "0.1em", textTransform: "uppercase",
+        }}>{status}</span>
+      );
+    };
+
+    const Gauge = ({ value, max = 100, label, warn = 70, crit = 90, unit = "%" }) => {
+      const pct = Math.min((value / max) * 100, 100);
+      const color = pct >= crit ? "#ff3a3a" : pct >= warn ? "#ffaa00" : "#c8f542";
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#8899aa" }}>
+            <span>{label}</span>
+            <span style={{ color, fontWeight: 700 }}>{fmt(value)}{unit}</span>
+          </div>
+          <div style={{ height: 6, background: "#1e2a35", borderRadius: 1, overflow: "hidden" }}>
+            <div style={{
+              width: `${pct}%`, height: "100%", background: color,
+              transition: "width 0.5s ease", borderRadius: 1,
+              boxShadow: `0 0 8px ${color}88`,
+            }} />
+          </div>
+        </div>
+      );
+    };
+
+    const Card = ({ title, children, accent = "#c8f542", style = {} }) => (
+      <div style={{
+        background: "#0d1821", border: "1px solid #1e2d3d",
+        borderTop: `2px solid ${accent}`, padding: "16px 18px",
+        display: "flex", flexDirection: "column", gap: 12, ...style,
+      }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: accent, textTransform: "uppercase" }}>
+          {title}
+        </div>
+        {children}
+      </div>
+    );
+
+    const Stat = ({ label, value, color = "#e8f4ff" }) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ fontSize: 10, color: "#5a7a8a", textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</div>
+        <div style={{ fontSize: 14, color, fontWeight: 600 }}>{value}</div>
+      </div>
+    );
+
+    const MiniTable = ({ rows }) => (
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <tbody>
+          {rows.map(([k, v, color], i) => (
+            <tr key={i} style={{ borderBottom: "1px solid #111d26" }}>
+              <td style={{ padding: "5px 0", color: "#5a7a8a", width: "50%" }}>{k}</td>
+              <td style={{ padding: "5px 0", color: color || "#cde", textAlign: "right", fontFamily: "monospace" }}>{v}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+
+    // ── Tab Panels ────────────────────────────────────────────────────────────
+    const OverviewPanel = ({ row }) => {
+      const overallStatus = row.result_overall_status;
+      const checks = num(row.result_checks_passed);
+      const warns = num(row.result_warnings);
+      const crits = num(row.result_criticals);
+      const total = num(row.result_total_checks);
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <Card title="Host Identity" style={{ gridColumn: "1 / 3" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+              <Stat label="Hostname" value={row.hostname} color="#c8f542" />
+              <Stat label="OS" value={row.os} />
+              <Stat label="Kernel" value={row.kernel} />
+              <Stat label="Architecture" value={row.arch} />
+              <Stat label="Uptime" value={fmtUptime(num(row.uptime_sec))} />
+              <Stat label="CPU Cores" value={row.cpu_count} />
+              <Stat label="Last Polled" value={row.timestamp_human} />
+              <Stat label="Timezone" value={row.timezone} />
+              <Stat label="NTP Synced" value={row.ntp_synced === "1" ? "Yes" : "No"} color={row.ntp_synced === "1" ? "#42f573" : "#ff6b6b"} />
+            </div>
+          </Card>
+          <Card title="Check Results" accent={overallStatus === "CRITICAL" ? "#ff3a3a" : overallStatus === "WARNING" ? "#ffaa00" : "#42f573"}>
+            <div style={{ textAlign: "center", padding: "8px 0" }}>
+              <div style={{
+                fontSize: 36, fontWeight: 900, letterSpacing: "-0.02em",
+                color: overallStatus === "CRITICAL" ? "#ff4444" : overallStatus === "WARNING" ? "#ffaa00" : "#42f573",
+              }}>{overallStatus}</div>
+            </div>
+            <MiniTable rows={[
+              ["Passed", `${checks} / ${total}`, "#42f573"],
+              ["Warnings", warns, warns > 0 ? "#ffaa00" : "#cde"],
+              ["Criticals", crits, crits > 0 ? "#ff4444" : "#cde"],
+              ["Reboot Required", row.reboot_required === "1" ? "YES" : "No", row.reboot_required === "1" ? "#ff4444" : "#cde"],
+            ]} />
+          </Card>
+          <Card title="CPU Load">
+            <div style={{ display: "flex", justifyContent: "space-around", marginBottom: 8 }}>
+              {[["1m", row.load_1m], ["5m", row.load_5m], ["15m", row.load_15m]].map(([t, v]) => (
+                <div key={t} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "#c8f542" }}>{v}</div>
+                  <div style={{ fontSize: 10, color: "#5a7a8a" }}>{t}</div>
+                </div>
+              ))}
+            </div>
+            <Gauge value={num(row.cpu_user_pct) + num(row.cpu_sys_pct)} label="CPU Busy" />
+            <Gauge value={num(row.cpu_iowait_pct)} label="I/O Wait" warn={5} crit={15} />
+          </Card>
+          <Card title="Memory">
+            <Gauge value={num(row.mem_used_pct)} label="RAM Used" />
+            <Gauge value={num(row.swap_used_pct)} label="Swap Used" warn={50} crit={80} />
+            <MiniTable rows={[
+              ["Total RAM", fmtMB(num(row.mem_total_mb))],
+              ["Available", fmtMB(num(row.mem_avail_mb)), "#42f573"],
+              ["Cached", fmtMB(num(row.mem_cached_mb))],
+            ]} />
+          </Card>
+          <Card title="Disk / Root">
+            <Gauge value={num(row.disk_root_used_pct)} label="Root Used" />
+            <MiniTable rows={[
+              ["Used", fmtMB(num(row.disk_root_used_mb))],
+              ["Available", fmtMB(num(row.disk_root_avail_mb)), "#42f573"],
+              ["Total", fmtMB(num(row.disk_root_total_mb))],
+            ]} />
+          </Card>
+          <Card title="Processes & Sockets">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Stat label="Processes" value={row.proc_total} />
+              <Stat label="Threads" value={row.proc_threads} />
+              <Stat label="Zombies" value={row.proc_zombie} color={num(row.proc_zombie) > 0 ? "#ffaa00" : "#cde"} />
+              <Stat label="TCP Established" value={row.tcp_established} />
+              <Stat label="TCP Listen" value={row.tcp_listen} />
+              <Stat label="UDP Total" value={row.udp_total} />
+            </div>
+          </Card>
+        </div>
+      );
+    };
+
+    const CPUPanel = ({ row }) => {
+      const temps = [];
+      for (let i = 0; i <= 21; i++) {
+        const label = row[`temp_${i}_label`];
+        const val = row[`temp_${i}_c`];
+        if (label && val && label !== "" && val !== "") {
+          const c = parseFloat(val);
+          if (!isNaN(c) && c > -200) temps.push({ label, c });
+        }
+      }
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Card title="Utilization">
+            <Gauge value={num(row.cpu_user_pct)} label="User" />
+            <Gauge value={num(row.cpu_sys_pct)} label="System" warn={20} crit={40} />
+            <Gauge value={num(row.cpu_idle_pct)} label="Idle" warn={30} crit={10} />
+            <Gauge value={num(row.cpu_iowait_pct)} label="I/O Wait" warn={5} crit={15} />
+            <Gauge value={num(row.cpu_steal_pct)} label="Steal" warn={5} crit={10} />
+          </Card>
+          <Card title="Load & Frequency">
+            <MiniTable rows={[
+              ["Load 1m", row.load_1m],
+              ["Load 5m", row.load_5m],
+              ["Load 15m", row.load_15m],
+              ["Frequency", `${num(row.cpu_freq_mhz).toFixed(0)} MHz`],
+              ["Governor", row.cpu_governor],
+              ["CPU Cores", row.cpu_count],
+              ["Context Switches", parseInt(row.cpu_context_switches_total).toLocaleString()],
+              ["Interrupts", parseInt(row.cpu_interrupts_total).toLocaleString()],
+            ]} />
+          </Card>
+          <Card title="Temperature Sensors" style={{ gridColumn: "1 / 3" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
+              {temps.map(({ label, c }, i) => {
+                const color = c >= 70 ? "#ff3a3a" : c >= 50 ? "#ffaa00" : "#c8f542";
+                return (
+                  <div key={i} style={{
+                    background: "#0a1520", border: `1px solid ${color}33`, padding: "10px 12px",
+                    display: "flex", flexDirection: "column", gap: 4,
+                  }}>
+                    <div style={{ fontSize: 10, color: "#5a7a8a", wordBreak: "break-word" }}>{label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color }}>{c.toFixed(1)}°C</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 16, fontSize: 10, color: "#5a7a8a" }}>
+              <span><span style={{ color: "#ff4444" }}>■</span> Critical (≥70°C)</span>
+              <span><span style={{ color: "#ffaa00" }}>■</span> Warm (≥50°C)</span>
+              <span><span style={{ color: "#c8f542" }}>■</span> Normal</span>
+              <span style={{ marginLeft: "auto" }}>Crit: <b style={{ color: "#ff4444" }}>{row.temp_crit_count}</b> · Warn: <b style={{ color: "#ffaa00" }}>{row.temp_warn_count}</b></span>
+            </div>
+          </Card>
+        </div>
+      );
+    };
+
+    const MemoryPanel = ({ row }) => (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Card title="RAM">
+          <Gauge value={num(row.mem_used_pct)} label="Used" />
+          <MiniTable rows={[
+            ["Total", fmtMB(num(row.mem_total_mb))],
+            ["Used", fmtMB(num(row.mem_used_mb))],
+            ["Available", fmtMB(num(row.mem_avail_mb)), "#42f573"],
+            ["Buffers", fmtMB(num(row.mem_buffers_mb))],
+            ["Cached", fmtMB(num(row.mem_cached_mb))],
+            ["Slab", fmtMB(num(row.mem_slab_mb))],
+          ]} />
+        </Card>
+        <Card title="Swap">
+          <Gauge value={num(row.swap_used_pct)} label="Swap Used" warn={30} crit={60} />
+          <MiniTable rows={[
+            ["Total", fmtMB(num(row.swap_total_mb))],
+            ["Used", fmtMB(num(row.swap_used_mb))],
+            ["Free", fmtMB(num(row.swap_total_mb) - num(row.swap_used_mb)), "#42f573"],
+          ]} />
+        </Card>
+        <Card title="File Descriptors" style={{ gridColumn: "1 / 3" }}>
+          <Gauge value={num(row.fd_used_pct)} label="FD Used %" warn={60} crit={85} />
+          <MiniTable rows={[
+            ["FDs Open", parseInt(row.fd_used).toLocaleString()],
+            ["FD Max", parseInt(row.fd_max) > 9e15 ? "unlimited" : parseInt(row.fd_max).toLocaleString()],
+            ["Used %", `${row.fd_used_pct}%`],
+          ]} />
+        </Card>
+      </div>
+    );
+
+    const DiskPanel = ({ row }) => {
+      const disks = [
+        { label: "Root (/)", prefix: "disk_root" },
+        { label: "Boot (/boot)", prefix: "disk_boot" },
+        { label: "EFI (/boot/efi)", prefix: "disk_boot_efi" },
+        { label: "NAS", prefix: "disk_nas" },
+        { label: "EFI Vars", prefix: "disk_sys_firmware_efi_efivars" },
+      ];
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {disks.map(({ label, prefix }) => {
+            const pct = num(row[`${prefix}_used_pct`]);
+            const used = num(row[`${prefix}_used_mb`]);
+            const avail = num(row[`${prefix}_avail_mb`]);
+            const total = num(row[`${prefix}_total_mb`]);
+            if (!total) return null;
+            return (
+              <Card key={prefix} title={label}>
+                <Gauge value={pct} label="Used" />
+                <MiniTable rows={[
+                  ["Used", fmtMB(used)],
+                  ["Available", fmtMB(avail), "#42f573"],
+                  ["Total", fmtMB(total)],
+                ]} />
+              </Card>
+            );
+          })}
+          <Card title="I/O — NVMe (nvme0n1)">
+            <MiniTable rows={[
+              ["Reads", parseInt(row.io_nvme0n1_reads_total).toLocaleString()],
+              ["Writes", parseInt(row.io_nvme0n1_writes_total).toLocaleString()],
+              ["Read KB", parseInt(row.io_nvme0n1_read_kb).toLocaleString()],
+              ["Write KB", parseInt(row.io_nvme0n1_write_kb).toLocaleString()],
+              ["SMART", row.smart_nvme0n1_status, row.smart_nvme0n1_status === "PASSED" ? "#42f573" : "#ff4444"],
+            ]} />
+          </Card>
+          <Card title="I/O — HDD (sda)">
+            <MiniTable rows={[
+              ["Reads", parseInt(row.io_sda_reads_total).toLocaleString()],
+              ["Writes", parseInt(row.io_sda_writes_total).toLocaleString()],
+              ["Read KB", parseInt(row.io_sda_read_kb).toLocaleString()],
+              ["Write KB", parseInt(row.io_sda_write_kb).toLocaleString()],
+              ["SMART", row.smart_sda_status, row.smart_sda_status === "PASSED" ? "#42f573" : "#ffaa00"],
+            ]} />
+          </Card>
+          <Card title="Health">
+            <MiniTable rows={[
+              ["Disk Criticals", row.disk_crit_count, num(row.disk_crit_count) > 0 ? "#ff4444" : "#cde"],
+              ["Disk Warnings", row.disk_warn_count, num(row.disk_warn_count) > 0 ? "#ffaa00" : "#cde"],
+              ["RAID Degraded", row.raid_degraded_count, num(row.raid_degraded_count) > 0 ? "#ff4444" : "#cde"],
+              ["Inode Root %", `${row.inode_root_used_pct}%`],
+              ["Inode Boot %", `${row.inode_boot_used_pct}%`],
+              ["SMART Fails", row.smart_fail_count, num(row.smart_fail_count) > 0 ? "#ff4444" : "#cde"],
+            ]} />
+          </Card>
+        </div>
+      );
+    };
+
+    const NetworkPanel = ({ row }) => {
+      const ifaces = [
+        "br_4cb7a22f5507","br_ace6758d308c","docker0","enp43s0",
+        "enp44s0","enx764e6fe77108","enx764e6fe7710a",
+        "veth3201da8","veth65e4511","vethbc2ebaf","vethc2c5ddf","virbr0","wlo1",
+      ];
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            <Card title="TCP Summary">
+              <MiniTable rows={[
+                ["Interfaces", row.net_iface_count],
+                ["Down", row.net_iface_down_count, num(row.net_iface_down_count) > 0 ? "#ffaa00" : "#cde"],
+                ["Total", row.tcp_total],
+                ["Listen", row.tcp_listen],
+                ["Established", row.tcp_established],
+                ["Time Wait", row.tcp_time_wait],
+                ["Close Wait", row.tcp_close_wait],
+              ]} />
+            </Card>
+            <Card title="UDP & Sockets">
+              <MiniTable rows={[
+                ["UDP Total", row.udp_total],
+                ["UDP Unconn", row.udp_unconn],
+                ["UDP Estab", row.udp_estab],
+                ["Unix Sockets", row.unix_socket_total],
+              ]} />
+            </Card>
+            <Card title="SYN/FIN States">
+              <MiniTable rows={[
+                ["SYN Sent", row.tcp_syn_sent, num(row.tcp_syn_sent) > 5 ? "#ffaa00" : "#cde"],
+                ["SYN Recv", row.tcp_syn_recv],
+                ["FIN Wait 1", row.tcp_fin_wait_1],
+                ["FIN Wait 2", row.tcp_fin_wait_2],
+                ["Closing", row.tcp_closing],
+                ["Last ACK", row.tcp_last_ack],
+              ]} />
+            </Card>
+          </div>
+          <Card title="Interface Details">
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #1e2d3d" }}>
+                    {["Interface","State","Speed","RX MB","TX MB","RX Pkts","TX Pkts","RX Err","TX Err","RX Drop"].map(h => (
+                      <th key={h} style={{ padding: "6px 8px", textAlign: "right", color: "#5a7a8a", fontWeight: 600, fontSize: 10, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ifaces.map((iface) => {
+                    const p = `net_${iface}`;
+                    const state = row[`${p}_state`];
+                    if (!state) return null;
+                    const speed = row[`${p}_speed_mbps`];
+                    return (
+                      <tr key={iface} style={{ borderBottom: "1px solid #111d26" }}>
+                        <td style={{ padding: "6px 8px", fontFamily: "monospace", fontSize: 11, color: "#c8f542" }}>{iface}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                          <span style={{ color: state === "up" ? "#42f573" : state === "unknown" ? "#ffaa00" : "#ff4444", fontWeight: 700, fontSize: 10 }}>{state}</span>
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#aab" }}>{speed ? `${speed} Mbps` : "—"}</td>
+                        {[`${p}_rx_mb`,`${p}_tx_mb`,`${p}_rx_pkts`,`${p}_tx_pkts`,`${p}_rx_err`,`${p}_tx_err`,`${p}_rx_drop`].map(k => (
+                          <td key={k} style={{ padding: "6px 8px", textAlign: "right", color: "#8899aa", fontFamily: "monospace" }}>
+                            {row[k] !== undefined ? (parseFloat(row[k]) > 0 ? parseFloat(row[k]).toLocaleString() : "0") : "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      );
+    };
+
+    const SecurityPanel = ({ row }) => (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Card title="SSH Configuration" accent={row.ssh_password_authentication === "yes" || row.ssh_permit_root_login === "yes" ? "#ff3a3a" : "#c8f542"}>
+          <MiniTable rows={[
+            ["Permit Root Login", row.ssh_permit_root_login || "unset",
+              row.ssh_permit_root_login === "yes" ? "#ff4444" : row.ssh_permit_root_login === "unset" ? "#ffaa00" : "#42f573"],
+            ["Password Auth", row.ssh_password_authentication || "unset",
+              row.ssh_password_authentication === "yes" ? "#ff4444" : row.ssh_password_authentication === "unset" ? "#ffaa00" : "#42f573"],
+            ["Failed Auth Total", parseInt(row.ssh_failed_auth_total).toLocaleString(),
+              num(row.ssh_failed_auth_total) > 100 ? "#ff4444" : num(row.ssh_failed_auth_total) > 0 ? "#ffaa00" : "#42f573"],
+          ]} />
+        </Card>
+        <Card title="Firewall">
+          <MiniTable rows={[
+            ["Type", row.firewall_type],
+            ["Active", row.firewall_active === "1" ? "Yes" : "No", row.firewall_active === "1" ? "#42f573" : "#ff4444"],
+          ]} />
+        </Card>
+        <Card title="System Events">
+          <MiniTable rows={[
+            ["Systemd Failed Units", row.systemd_failed_units, num(row.systemd_failed_units) > 0 ? "#ff4444" : "#42f573"],
+            ["Journal Errors", row.journal_error_count, num(row.journal_error_count) > 0 ? "#ffaa00" : "#42f573"],
+            ["OOM Kills", row.oom_kill_count, num(row.oom_kill_count) > 0 ? "#ff4444" : "#42f573"],
+            ["Zombie Procs", row.proc_zombie, num(row.proc_zombie) > 0 ? "#ffaa00" : "#42f573"],
+            ["D-State Procs", row.proc_dstate, num(row.proc_dstate) > 0 ? "#ff4444" : "#42f573"],
+            ["Reboot Required", row.reboot_required === "1" ? "YES" : "No", row.reboot_required === "1" ? "#ff4444" : "#42f573"],
+          ]} />
+        </Card>
+        <Card title="Metrics Summary">
+          <MiniTable rows={[
+            ["Total Checks", row.result_total_checks],
+            ["Passed", row.result_checks_passed, "#42f573"],
+            ["Warnings", row.result_warnings, num(row.result_warnings) > 0 ? "#ffaa00" : "#cde"],
+            ["Criticals", row.result_criticals, num(row.result_criticals) > 0 ? "#ff4444" : "#cde"],
+            ["Metric Points", row.result_metric_count],
+            ["Overall", row.result_overall_status, row.result_overall_status === "CRITICAL" ? "#ff4444" : "#42f573"],
+          ]} />
+        </Card>
+      </div>
+    );
+
+    const RawPanel = ({ rows }) => {
+      const [filter, setFilter] = useState("");
+      const [selectedRow, setSelectedRow] = useState(0);
+      const row = rows[selectedRow];
+      const headers = Object.keys(row);
+      const filtered = headers.filter(h => !filter || h.toLowerCase().includes(filter.toLowerCase()) || String(row[h]).toLowerCase().includes(filter.toLowerCase()));
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder="Filter columns / values…"
+              style={{
+                flex: 1, background: "#0d1821", border: "1px solid #1e2d3d",
+                color: "#cde", padding: "8px 12px", fontSize: 12, fontFamily: "monospace", outline: "none",
+              }}
+            />
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {rows.map((r, i) => (
+                <button key={i} onClick={() => setSelectedRow(i)} style={{
+                  background: selectedRow === i ? "#c8f542" : "#0d1821",
+                  border: "1px solid #1e2d3d", color: selectedRow === i ? "#000" : "#cde",
+                  padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace",
+                }}>Row {i + 1}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#5a7a8a", whiteSpace: "nowrap" }}>{filtered.length} / {headers.length} cols</div>
+          </div>
+          <div style={{ maxHeight: 600, overflowY: "auto", background: "#0a1118", border: "1px solid #1e2d3d" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead style={{ position: "sticky", top: 0, background: "#0d1821", zIndex: 1 }}>
+                <tr>
+                  <th style={{ padding: "8px 12px", textAlign: "left", color: "#5a7a8a", borderBottom: "2px solid #1e2d3d", width: "45%" }}>Column</th>
+                  <th style={{ padding: "8px 12px", textAlign: "left", color: "#5a7a8a", borderBottom: "2px solid #1e2d3d" }}>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((h, i) => (
+                  <tr key={h} style={{ background: i % 2 === 0 ? "#0a1118" : "#0d1420", borderBottom: "1px solid #111d26" }}>
+                    <td style={{ padding: "5px 12px", fontFamily: "monospace", color: "#c8f542", fontSize: 10 }}>{h}</td>
+                    <td style={{ padding: "5px 12px", fontFamily: "monospace", color: "#aabbcc" }}>
+                      {row[h] ? row[h] : <span style={{ color: "#2a3a4a" }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    // ── Upload Screen ─────────────────────────────────────────────────────────
+    const UploadScreen = ({ onLoad }) => {
+      const [dragging, setDragging] = useState(false);
+      const inputRef = useRef();
+      const handle = (file) => {
+        const r = new FileReader();
+        r.onload = (e) => onLoad(e.target.result);
+        r.readAsText(file);
+      };
+      return (
+        <div style={{
+          minHeight: "100vh", background: "#060d14", display: "flex",
+          alignItems: "center", justifyContent: "center",
+          fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+        }}>
+          <div style={{ textAlign: "center", maxWidth: 480 }}>
+            <div style={{ fontSize: 28, color: "#e8f4ff", fontWeight: 700, marginBottom: 8 }}>System Metrics Viewer</div>
+            <div style={{ fontSize: 13, color: "#5a7a8a", marginBottom: 32 }}>Drop a metrics CSV to visualize system health</div>
+            <div
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handle(f); }}
+              onClick={() => inputRef.current.click()}
+              style={{
+                border: `2px dashed ${dragging ? "#c8f542" : "#1e2d3d"}`,
+                background: dragging ? "#c8f54211" : "#0d1821",
+                padding: "48px 32px", cursor: "pointer", transition: "all 0.2s ease",
+              }}
+            >
+              <div style={{ fontSize: 36, marginBottom: 12 }}>📂</div>
+              <div style={{ color: "#cde", fontSize: 13 }}>Click or drag & drop a CSV file</div>
+              <div style={{ color: "#5a7a8a", fontSize: 11, marginTop: 8 }}>Supports single snapshots and multi-row trend data</div>
+            </div>
+            <input ref={inputRef} type="file" accept=".csv" style={{ display: "none" }}
+              onChange={e => { if (e.target.files[0]) handle(e.target.files[0]); }} />
+          </div>
+        </div>
+      );
+    };
+
+    // ── App ───────────────────────────────────────────────────────────────────
+    const TABS = ["Overview", "Trends", "CPU & Temps", "Memory", "Disk & I/O", "Network", "Security", "Raw Data"];
+
+    function App() {
+      const [rows, setRows] = useState(null);
+      const [tab, setTab] = useState(0);
+      const [rowIdx, setRowIdx] = useState(0);
+
+      const handleLoad = useCallback((text) => {
+        try {
+          const parsed = parseCSV(text);
+          if (parsed.length) { setRows(parsed); setRowIdx(parsed.length - 1); }
+        } catch (e) { alert("Could not parse CSV: " + e.message); }
+      }, []);
+
+      if (!rows) return <UploadScreen onLoad={handleLoad} />;
+
+      const row = rows[rowIdx];
+      const status = row.result_overall_status;
+
+      return (
+        <div style={{ minHeight: "100vh", background: "#060d14", color: "#cde", fontFamily: "'IBM Plex Mono', 'Courier New', monospace" }}>
+          {/* Header */}
+          <div style={{
+            background: "#0a1520", borderBottom: "1px solid #1e2d3d",
+            padding: "12px 24px", display: "flex", alignItems: "center", gap: 16,
+          }}>
+            <div style={{ fontSize: 10, color: "#c8f542", letterSpacing: "0.3em" }}>◆ SYSMON</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#e8f4ff" }}>{row.hostname}</div>
+            <StatusBadge status={status} />
+            <div style={{ fontSize: 11, color: "#5a7a8a" }}>{row.timestamp_human}</div>
+            <div style={{ fontSize: 11, color: "#5a7a8a" }}>↑ {fmtUptime(num(row.uptime_sec))}</div>
+            {rows.length > 1 && (
+              <div style={{ fontSize: 11, color: "#2a6a4a", background: "#0a2a1a", border: "1px solid #1a4a2a", padding: "2px 10px", borderRadius: 2 }}>
+                {rows.length} snapshots loaded
+              </div>
+            )}
+            <div style={{ flex: 1 }} />
+            {/* Snapshot selector — only on non-Trends tabs */}
+            {tab !== 1 && rows.length > 1 && (
+              <div style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, color: "#5a7a8a" }}>
+                <span>Snapshot:</span>
+                {rows.map((r, i) => (
+                  <button key={i} onClick={() => setRowIdx(i)} style={{
+                    background: rowIdx === i ? "#c8f542" : "transparent",
+                    border: "1px solid #1e2d3d", color: rowIdx === i ? "#000" : "#8899aa",
+                    padding: "3px 8px", cursor: "pointer", fontSize: 10, fontFamily: "monospace",
+                  }}>{i + 1}</button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setRows(null)} style={{
+              background: "transparent", border: "1px solid #1e2d3d", color: "#5a7a8a",
+              padding: "4px 10px", cursor: "pointer", fontSize: 10, fontFamily: "monospace",
+            }}>↑ Load</button>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ background: "#0a1520", borderBottom: "1px solid #1e2d3d", padding: "0 24px", display: "flex" }}>
+            {TABS.map((t, i) => (
+              <button key={t} onClick={() => setTab(i)} style={{
+                background: "transparent", border: "none",
+                borderBottom: tab === i ? "2px solid #c8f542" : "2px solid transparent",
+                color: tab === i ? "#c8f542" : i === 1 ? "#5a9abf" : "#5a7a8a",
+                padding: "10px 14px", cursor: "pointer",
+                fontSize: 11, fontFamily: "monospace", letterSpacing: "0.05em", transition: "color 0.15s",
+                fontWeight: i === 1 ? 700 : 400,
+              }}>{t}{i === 1 && rows.length > 1 ? ` (${rows.length})` : ""}</button>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div style={{ padding: 20 }}>
+            {tab === 0 && <OverviewPanel row={row} />}
+            {tab === 1 && <TrendsPanel rows={rows} />}
+            {tab === 2 && <CPUPanel row={row} />}
+            {tab === 3 && <MemoryPanel row={row} />}
+            {tab === 4 && <DiskPanel row={row} />}
+            {tab === 5 && <NetworkPanel row={row} />}
+            {tab === 6 && <SecurityPanel row={row} />}
+            {tab === 7 && <RawPanel rows={rows} />}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
