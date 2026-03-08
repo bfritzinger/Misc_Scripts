@@ -1,21 +1,24 @@
 # chown_throttled.sh
 
-A performance-conscious bash script for recursively changing file ownership across multiple directories on high-throughput systems. Designed to run safely alongside active workloads by controlling CPU and I/O priority, batching filesystem operations to avoid argument list limits, and skipping files that are already correctly owned.
+A performance-conscious bash script for recursively changing file ownership across multiple directories on high-throughput systems. Designed to run safely alongside active workloads by controlling CPU and I/O priority, running parallel workers for faster throughput, batching filesystem operations to avoid argument list limits, and skipping files that are already correctly owned.
 
 ---
 
 ## Features
 
-- **Skips already-owned files** — uses `find`'s native `-user`/`-group` predicates to filter at traversal time, so correctly owned files never reach `chown`
+- **Parallel workers** — `xargs -P N` runs multiple `chown` batches concurrently; worker count auto-detected from CPU count or set manually
+- **Parallel directory processing** — optional `-D` flag processes multiple target directories simultaneously as background jobs
+- **Skips already-owned files** — uses `find`'s native `-user`/`-group` predicates to filter at traversal time; correctly owned files never reach `chown`
 - **Avoids `ARG_MAX` overflow** — pipes through `xargs -n BATCH_SIZE` so no "Argument list too long" errors regardless of file count
 - **Tunable CPU priority** — `nice` level is configurable from normal (`0`) to lowest (`19`)
 - **Tunable I/O priority** — `ionice` class is configurable: realtime, best-effort, or idle
-- **Configurable throttle** — millisecond sleep between batches keeps burst I/O in check
+- **Per-worker throttle** — each worker sleeps independently between batches, spreading disk load rather than synchronizing spikes
 - **Null-delimited paths** — `find -print0 | xargs -0` safely handles filenames with spaces, newlines, or special characters
 - **Dry-run mode** — preview exactly what would be changed before making any modifications
-- **Multi-directory support** — process any number of target directories in a single run
+- **Multi-directory support** — process any number of target directories in a single run, sequentially or in parallel
 - **Input validation** — verifies target user/group exist on the system before starting
-- **Timestamped logging** — all output includes timestamps; warnings and errors go to stderr
+- **Timestamped logging** — all output includes timestamps and PID; warnings and errors go to stderr
+- **Aggregated summary** — per-directory counts are combined into a final run total even when running in parallel
 
 ---
 
@@ -25,10 +28,11 @@ A performance-conscious bash script for recursively changing file ownership acro
 |---|---|---|
 | `bash` | Shell interpreter | Yes |
 | `find` | Filesystem traversal and ownership filtering | Yes |
-| `xargs` | Batched execution | Yes |
+| `xargs` | Batched and parallel execution | Yes |
 | `nice` | CPU priority control | Yes |
 | `bc` | Millisecond sleep conversion | Recommended |
 | `ionice` | I/O priority control | Optional (gracefully skipped if absent) |
+| `nproc` | Auto-detect CPU count for default workers | Optional (falls back to 4) |
 
 All of the above are standard on Linux systems. `ionice` is part of the `util-linux` package and is available on virtually all modern Linux distributions.
 
@@ -37,10 +41,9 @@ All of the above are standard on Linux systems. `ionice` is part of the `util-li
 ## Installation
 
 ```bash
-# Download / copy the script
 chmod +x chown_throttled.sh
 
-# Optionally move to a location on your PATH
+# Optionally install system-wide
 sudo mv chown_throttled.sh /usr/local/bin/chown_throttled
 ```
 
@@ -54,12 +57,14 @@ sudo mv chown_throttled.sh /usr/local/bin/chown_throttled
 Options:
   -u USER[:GROUP]   Owner to set (required)
   -d DIR            Target directory (repeatable)
-  -b BATCH_SIZE     Files per chown call            (default: 500)
-  -s SLEEP_MS       Sleep between batches in ms     (default: 50)
-  -t TYPE           Find type: f=files d=dirs a=all (default: a)
-  -p NICE_LEVEL     CPU nice level 0=normal..19=lowest (default: 10)
+  -b BATCH_SIZE     Files per worker per chown call      (default: 500)
+  -w WORKERS        Parallel workers                     (default: nproc)
+  -s SLEEP_MS       Sleep per worker between batches ms  (default: 50)
+  -t TYPE           Find type: f=files d=dirs a=all      (default: a)
+  -p NICE_LEVEL     CPU nice level 0=normal..19=lowest   (default: 10)
   -i IONICE_CLASS   IO class: 1=realtime 2=best-effort 3=idle (default: 2)
-  -n                Dry run — show what would change, make no changes
+  -D                Process multiple -d directories in parallel
+  -n                Dry run -- show what would change, make no changes
   -h                Show help
 ```
 
@@ -67,14 +72,19 @@ Options:
 
 ## Examples
 
-**Basic usage — two directories, default throttle:**
+**Basic — auto worker count, two directories:**
 ```bash
 ./chown_throttled.sh -u www-data:www-data -d /var/www -d /srv/uploads
 ```
 
-**Files only, smaller batches, 25ms throttle:**
+**Explicit 8 workers, files only, fast throttle:**
 ```bash
-./chown_throttled.sh -u deploy:deploy -d /opt/app -t f -b 200 -s 25
+./chown_throttled.sh -u deploy:deploy -d /opt/app -w 8 -t f -s 10
+```
+
+**Multiple directories processed in parallel, 4 workers each:**
+```bash
+./chown_throttled.sh -u app:app -d /data/a -d /data/b -d /data/c -D -w 4
 ```
 
 **Dry run first — always recommended on production systems:**
@@ -82,20 +92,63 @@ Options:
 ./chown_throttled.sh -u deploy:deploy -d /opt/app -n
 ```
 
-**Elevated priority during a maintenance window:**
+**Maximum throughput during maintenance window:**
 ```bash
-./chown_throttled.sh -u app:app -d /data -p 0 -i 1
+./chown_throttled.sh -u app:app -d /data -w 16 -b 1000 -s 0 -p 0 -i 1
 ```
 
-**Backed-off priority during peak hours:**
+**Peak hours — backed off, slow and steady:**
 ```bash
-./chown_throttled.sh -u app:app -d /data -p 15 -i 3 -s 200
+./chown_throttled.sh -u app:app -d /data -w 2 -b 200 -s 250 -p 15 -i 3
 ```
 
-**User-only change (no group):**
-```bash
-./chown_throttled.sh -u deploy -d /srv/app
+---
+
+## Parallelism Model
+
+There are two independent layers of parallelism, both configurable:
+
+### Layer 1 — Worker parallelism within a directory (`-w`)
+
+`xargs -P WORKERS` dispatches batches of `BATCH_SIZE` paths to `WORKERS` concurrent `chown` processes simultaneously. Since `xargs` feeds each worker a distinct batch from the stream, there is no file overlap and no coordination needed between workers.
+
 ```
+find output stream
+        │
+        ▼
+  ┌─────────────────────────────────┐
+  │         xargs -P 4              │
+  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ │
+  │  │chown │ │chown │ │chown │ │chown │ │  ← 4 concurrent workers
+  │  │batch1│ │batch2│ │batch3│ │batch4│ │
+  │  └──────┘ └──────┘ └──────┘ └──────┘ │
+  └─────────────────────────────────┘
+```
+
+### Layer 2 — Directory parallelism (`-D`)
+
+With `-D`, each target directory is launched as a background job and all directories are processed simultaneously. Each directory job has its own `find` stream and its own `xargs -P WORKERS` pool.
+
+```
+  /data/a ──► [find | xargs -P 4] ──► chown workers
+  /data/b ──► [find | xargs -P 4] ──► chown workers   (all running at once)
+  /data/c ──► [find | xargs -P 4] ──► chown workers
+```
+
+Results from each directory job are written to temp files and aggregated into the final summary after all jobs complete.
+
+### Choosing the right worker count
+
+The optimal worker count depends on your storage type:
+
+| Storage | Recommended `-w` | Reason |
+|---|---|---|
+| NVMe SSD | `8`–`16` | High IOPS, parallelism pays off |
+| SATA SSD | `4`–`8` | Good IOPS, diminishing returns above 8 |
+| HDD / RAID spinning | `2`–`4` | Sequential access is faster; too many workers causes seek thrash |
+| NFS / network storage | `2`–`4` | Latency-bound; more workers increase server load |
+
+A reasonable starting point is `nproc` (the default), then tune based on observed `iowait` in `top` or `iostat`.
 
 ---
 
@@ -103,105 +156,102 @@ Options:
 
 ### CPU Priority (`-p`)
 
-Controls how aggressively the script competes for CPU time relative to other processes.
-
 | Value | Effect |
 |---|---|
-| `0` | Normal priority — same as any other process |
+| `0` | Normal priority |
 | `10` | Default — mild background behavior |
-| `19` | Lowest possible — only runs when CPU is otherwise idle |
+| `19` | Lowest — only runs when CPU is otherwise idle |
 
 ### I/O Priority (`-i`)
-
-Controls how the kernel schedules disk access for this script.
 
 | Class | Value | Effect |
 |---|---|---|
 | Realtime | `1` | Highest I/O priority — preempts other processes |
-| Best-effort | `2` | Default — scheduled fairly alongside other processes |
-| Idle | `3` | Only accesses disk when no other process needs it |
+| Best-effort | `2` | Default — scheduled fairly alongside others |
+| Idle | `3` | Only accesses disk when nothing else needs it |
 
-### Recommended Presets
+### Throttle and Priority Presets
 
 | Scenario | Flags |
 |---|---|
-| Maintenance window, no active load | `-p 0 -i 1 -s 0` |
-| Low-traffic period | `-p 5 -i 2 -s 25` |
-| Default / moderate load | `-p 10 -i 2 -s 50` |
-| Peak hours, high-throughput system | `-p 15 -i 3 -s 200` |
-| Maximum yield — near-zero impact | `-p 19 -i 3 -b 100 -s 500` |
+| Maintenance window, no load | `-w auto -p 0 -i 1 -s 0` |
+| Low-traffic period | `-w 4 -p 5 -i 2 -s 10` |
+| Default / moderate load | `-w auto -p 10 -i 2 -s 50` |
+| Peak hours, high-throughput | `-w 2 -p 15 -i 3 -s 200` |
+| Maximum yield, near-zero impact | `-w 1 -p 19 -i 3 -b 100 -s 500` |
 
 ---
 
 ## How It Works
 
-1. **Validation** — confirms the target user and group exist on the system and all directories are accessible before doing any work.
+1. **Validation** — confirms the target user and group exist on the system and all directories are accessible before any work begins.
 
-2. **Pre-scan** — counts total items and already-correctly-owned items per directory and reports the delta before processing begins.
+2. **Batch executor** — a small helper shell script is written to a temp directory. `xargs` calls this script once per batch, passing the batch of paths as arguments. It handles the `nice`/`ionice` wrapping, the actual `chown`, and the per-worker sleep throttle.
 
-3. **Filtered traversal** — `find` uses `-user` / `-group` predicates to emit only paths that actually need changing. Correctly owned files never leave `find`.
+3. **Pre-scan** — for each directory, `find` counts total items and already-correctly-owned items at lowest priority (`nice -n 19`) and reports the delta.
 
-4. **Batched execution** — paths flow through a `|` into `xargs -0 -n BATCH_SIZE`, which invokes `chown` on chunks of up to `BATCH_SIZE` files per call. This keeps individual argument lists well within OS limits.
+4. **Filtered traversal** — `find` uses `-user`/`-group` predicates to emit only paths that actually need changing. Correctly owned files never leave `find`.
 
-5. **Priority-controlled execution** — each `chown` call is wrapped in `nice` and `ionice` at the configured levels.
+5. **Parallel batch execution** — paths stream through a pipe into `xargs -0 -n BATCH_SIZE -P WORKERS`. `xargs` distributes batches across up to `WORKERS` concurrent `chown` invocations. Each worker sleeps independently after its batch, so workers don't synchronize their disk pressure.
 
-6. **Throttle** — a configurable sleep pause runs after each batch to spread I/O load over time rather than spiking it.
+6. **Directory parallelism (optional)** — with `-D`, each directory is launched as a background process. All directories run their own `find | xargs` pipeline simultaneously.
 
-7. **Cleanup** — the temporary batch executor script written to `/tmp` is removed automatically on exit via a `trap`.
+7. **Aggregation** — each directory worker writes its found/skipped counts to a temp file. After all workers complete, the main process reads and sums them for the final report.
+
+8. **Cleanup** — the temp directory (batch script + count files) is removed automatically on exit via a `trap`, including on `Ctrl+C` or error.
 
 ---
 
 ## Sample Output
 
 ```
-[2025-06-12 14:22:01] ========================================
-[2025-06-12 14:22:01]   chown_throttled.sh
-[2025-06-12 14:22:01] ========================================
-[2025-06-12 14:22:01]   Owner      : www-data:www-data
-[2025-06-12 14:22:01]   Directories: /var/www /srv/uploads
-[2025-06-12 14:22:01]   Batch size : 500 items/call
-[2025-06-12 14:22:01]   Throttle   : 50ms between batches
-[2025-06-12 14:22:01]   CPU nice   : 10 (0=normal, 19=lowest)
-[2025-06-12 14:22:01]   IO class   : 2 (1=rt, 2=best-effort, 3=idle)
-[2025-06-12 14:22:01]   Find type  : a (f=files, d=dirs, a=all)
-[2025-06-12 14:22:01]   Skip owned : YES -- skipping items already owned by www-data:www-data
-[2025-06-12 14:22:01]   Dry run    : false
-[2025-06-12 14:22:01] ========================================
-[2025-06-12 14:22:01] --- Directory: /var/www ---
-[2025-06-12 14:22:02]   Total items    : 18432
-[2025-06-12 14:22:02]   Already owned  : 16105 (skipping)
-[2025-06-12 14:22:02]   To process     : 2327
-[2025-06-12 14:22:09]   Status: OK
-[2025-06-12 14:22:09] --- Directory: /srv/uploads ---
-[2025-06-12 14:22:10]   Total items    : 4210
-[2025-06-12 14:22:10]   Already owned  : 4210 (skipping)
-[2025-06-12 14:22:10]   Nothing to do in /srv/uploads -- all items already owned by www-data:www-data
-[2025-06-12 14:22:10] ========================================
-[2025-06-12 14:22:10]   Run complete
-[2025-06-12 14:22:10]   Total items found   : 22642
-[2025-06-12 14:22:10]   Skipped (owned)     : 20315
-[2025-06-12 14:22:10]   Processed           : 2327
-[2025-06-12 14:22:10] ========================================
+[2025-06-12 14:22:01] [12345] ========================================
+[2025-06-12 14:22:01] [12345]   chown_throttled.sh
+[2025-06-12 14:22:01] [12345] ========================================
+[2025-06-12 14:22:01] [12345]   Owner        : www-data:www-data
+[2025-06-12 14:22:01] [12345]   Directories  : /var/www /srv/uploads
+[2025-06-12 14:22:01] [12345]   Batch size   : 500 items/worker/call
+[2025-06-12 14:22:01] [12345]   Workers      : 8 (auto-detected)
+[2025-06-12 14:22:01] [12345]   Parallel dirs: false
+[2025-06-12 14:22:01] [12345]   Throttle     : 50ms per worker between batches
+[2025-06-12 14:22:01] [12345]   CPU nice     : 10 (0=normal, 19=lowest)
+[2025-06-12 14:22:01] [12345]   IO class     : 2 (1=rt, 2=best-effort, 3=idle)
+[2025-06-12 14:22:01] [12345]   Find type    : a (f=files, d=dirs, a=all)
+[2025-06-12 14:22:01] [12345]   Skip owned   : YES
+[2025-06-12 14:22:01] [12345]   Dry run      : false
+[2025-06-12 14:22:01] [12345] ========================================
+[2025-06-12 14:22:01] [12345] --- Directory: /var/www (workers: 8) ---
+[2025-06-12 14:22:02] [12345]   [/var/www] Total: 18432 | Already owned: 16105 | To process: 2327
+[2025-06-12 14:22:04] [12345]   [/var/www] Status: OK
+[2025-06-12 14:22:04] [12345] --- Directory: /srv/uploads (workers: 8) ---
+[2025-06-12 14:22:05] [12345]   [/srv/uploads] Total: 4210 | Already owned: 4210 | To process: 0
+[2025-06-12 14:22:05] [12345]   [/srv/uploads] Nothing to do -- all items already owned by www-data:www-data
+[2025-06-12 14:22:05] [12345] ========================================
+[2025-06-12 14:22:05] [12345]   Run complete
+[2025-06-12 14:22:05] [12345]   Total items found   : 22642
+[2025-06-12 14:22:05] [12345]   Skipped (owned)     : 20315
+[2025-06-12 14:22:05] [12345]   Processed           : 2327
+[2025-06-12 14:22:05] [12345]   Workers used        : 8
+[2025-06-12 14:22:05] [12345] ========================================
 ```
 
 ---
 
 ## Cron / Scheduled Use
 
-The script is well-suited for scheduled runs on active systems. Redirect output to a log file and let cron manage scheduling:
-
 ```cron
-# Run every 15 minutes, backed-off priority, log output
-*/15 * * * * /usr/local/bin/chown_throttled -u www-data:www-data -d /var/www -p 10 -i 3 -s 100 >> /var/log/chown_throttled.log 2>&1
+# Run every 15 minutes, 4 workers, backed-off priority
+*/15 * * * * /usr/local/bin/chown_throttled -u www-data:www-data -d /var/www -w 4 -p 10 -i 3 -s 100 >> /var/log/chown_throttled.log 2>&1
 ```
 
-To keep log files from growing unbounded, pair with `logrotate` or use a wrapper that truncates on a schedule.
+Pair with `logrotate` to prevent unbounded log growth.
 
 ---
 
 ## Notes
 
 - The script must be run as `root` or a user with permission to `chown` the target files.
-- The pre-scan counts are informational and run at lowest priority (`nice -n 19`). On very large trees they add a small delay before processing begins — set `-s 0` and `-b 1000` if you want to skip the wait.
-- `ionice` is silently skipped if not available on the system; `nice` is always applied.
-- The temporary batch executor created in `/tmp` is automatically removed when the script exits, including on `Ctrl+C` or error.
+- With `-D`, the effective total worker count is `WORKERS × number of directories`. On a 4-core system running 3 directories with `-w 4`, up to 12 concurrent `chown` processes may be active. Reduce `-w` accordingly when using `-D` on resource-constrained systems.
+- `ionice` is silently skipped if not available; `nice` is always applied.
+- The temp directory in `/tmp` is automatically removed on exit, including on `Ctrl+C` or error.
+- Per-worker throttle (`-s`) is independent per worker — with 8 workers each sleeping 50ms, the aggregate throughput is not reduced proportionally; workers sleep in parallel, not sequentially.
