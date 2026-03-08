@@ -43,9 +43,10 @@ TIME_WAIT_WARN="${TIME_WAIT_WARN:-500}"
 # COLOURS
 # ---------------------------------------------------------------------------
 if [[ -t 1 ]]; then
-    RED='\033[0;31m';  YELLOW='\033[1;33m'; GREEN='\033[0;32m'
-    CYAN='\033[0;36m'; BOLD='\033[1m';      RESET='\033[0m'
-    BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; DIM='\033[2m'
+    # $'...' syntax embeds actual ESC bytes so ANSI stripping works reliably
+    RED=$'\033[0;31m';   YELLOW=$'\033[1;33m'; GREEN=$'\033[0;32m'
+    CYAN=$'\033[0;36m';  BOLD=$'\033[1m';      RESET=$'\033[0m'
+    BLUE=$'\033[0;34m';  MAGENTA=$'\033[0;35m'; DIM=$'\033[2m'
 else
     RED=''; YELLOW=''; GREEN=''; CYAN=''; BOLD=''; RESET=''; BLUE=''; MAGENTA=''; DIM=''
 fi
@@ -77,17 +78,125 @@ metric() {
 # ---------------------------------------------------------------------------
 # DISPLAY HELPERS
 # ---------------------------------------------------------------------------
-header()  {
-    echo
-    echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════╗${RESET}"
-    printf  "${BOLD}${CYAN}║  %-62s║${RESET}\n" "$1"
-    echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════╝${RESET}"
+
+# visible_len <string>
+# Count printable characters after stripping ANSI escape codes.
+# Uses Python3 (always present on modern Linux) for locale-safe Unicode char counting —
+# avoids wc -m byte/char inconsistencies across C vs UTF-8 locales.
+visible_len() {
+    python3 -c "
+import sys, re
+s = sys.argv[1]
+s = re.sub(r'\x1b\[[0-9;]*[mK]', '', s)
+print(len(s), end='')
+" "$1"
 }
+
+# hline <width> <char>
+# Print exactly <width> repetitions of <char> using awk — safe for multi-byte chars.
+hline() {
+    awk -v n="$1" -v c="${2:-═}" 'BEGIN{ for(i=0;i<n;i++) printf c }'
+}
+
+# term_width
+# Return usable terminal width: tput cols capped to [60, 120].
+term_width() {
+    local w; w=$(tput cols 2>/dev/null || echo 80)
+    (( w > 120 )) && w=120
+    (( w < 60  )) && w=60
+    echo "$w"
+}
+
+# header <title>
+# Single-row box sized to the title, with 2-space padding each side.
+header() {
+    local title="$1"
+    local tw; tw=$(term_width)
+    local tlen; tlen=$(visible_len "$title")
+    local inner=$(( tlen + 4 ))
+    (( inner < 40       )) && inner=40
+    (( inner > tw - 2   )) && inner=$(( tw - 2 ))
+    local bar; bar=$(hline "$inner" '═')
+    echo
+    printf "${BOLD}${CYAN}╔%s╗${RESET}\n" "$bar"
+    printf "${BOLD}${CYAN}║${RESET}  %-$(( inner - 4 ))s  ${BOLD}${CYAN}║${RESET}\n" "$title"
+    printf "${BOLD}${CYAN}╚%s╝${RESET}\n" "$bar"
+}
+
+# section <title>
+# Bold ▶ heading followed by a full terminal-width rule.
 section() {
+    local tw; tw=$(term_width)
     echo
-    echo -e "${BOLD}${BLUE}▶  $1${RESET}"
-    printf '%0.s─' {1..66}; echo
+    printf "${BOLD}${BLUE}▶  %s${RESET}\n" "$1"
+    hline "$tw" '─'; echo
 }
+
+# box_banner <colour> <title> [row ...]
+#
+# Draws a box that auto-sizes to its widest content row or title.
+# Row prefixes:
+#   "="   → render as a ╠═╣ divider (no content)
+#   "~"   → row contains embedded ANSI colour codes; strip them for width measurement
+#   (none)→ plain text row, no embedded codes
+#
+# Example:
+#   box_banner "$CYAN" "MY TITLE" \
+#       "plain row" \
+#       "~${GREEN}coloured${RESET} row" \
+#       "=" \
+#       "another plain row"
+box_banner() {
+    local colour="$1" title="$2"; shift 2
+    local rows=("$@")
+    local tw; tw=$(term_width)
+
+    # --- measure widest row ---
+    local title_len; title_len=$(visible_len "$title")
+    local max=$(( title_len + 4 ))   # title + 2-space padding each side + 2 for ║
+
+    for row in "${rows[@]}"; do
+        [[ "$row" == "=" ]] && continue
+        local plain="${row#\~}"
+        local vl; vl=$(visible_len "$plain")
+        local needed=$(( vl + 4 ))
+        (( needed > max )) && max=$needed
+    done
+
+    local inner=$max
+    (( inner > tw - 2 )) && inner=$(( tw - 2 ))
+    local content_w=$(( inner - 4 ))   # printable width between the two ║ + 2-space pads
+
+    local bar; bar=$(hline "$inner" '═')
+
+    # --- title row (centred against full inner width, no 2-space margin) ---
+    local pad_total=$(( inner - title_len ))
+    local pad_l=$(( pad_total / 2 ))
+    local pad_r=$(( pad_total - pad_l ))
+
+    echo
+    printf "${BOLD}${colour}╔%s╗${RESET}\n" "$bar"
+    printf "${BOLD}${colour}║${RESET}%*s%s%*s${BOLD}${colour}║${RESET}\n" \
+        "$pad_l" "" "$title" "$pad_r" ""
+    printf "${BOLD}${colour}╠%s╣${RESET}\n" "$bar"
+
+    # --- content rows ---
+    for row in "${rows[@]}"; do
+        if [[ "$row" == "=" ]]; then
+            printf "${BOLD}${colour}╠%s╣${RESET}\n" "$bar"
+            continue
+        fi
+        local plain="${row#\~}"
+        local vl; vl=$(visible_len "$plain")
+        local rpad=$(( content_w - vl ))
+        # %b interprets escape sequences so actual ESC colour codes render correctly
+        printf "${BOLD}${colour}║${RESET}  %b%*s  ${BOLD}${colour}║${RESET}\n" \
+            "$plain" "$rpad" ""
+    done
+
+    printf "${BOLD}${colour}╚%s╝${RESET}\n" "$bar"
+}
+
 ok()   { echo -e "  ${GREEN}[  OK  ]${RESET}  $*"; CHECKS_PASSED=$(( CHECKS_PASSED + 1 )); }
 warn() { echo -e "  ${YELLOW}[ WARN ]${RESET}  $*"; WARNINGS=$(( WARNINGS + 1 )); }
 crit() { echo -e "  ${RED}[ CRIT ]${RESET}  $*"; CRITICALS=$(( CRITICALS + 1 )); }
@@ -844,21 +953,53 @@ metric "ntp_synced" "$NTP_SYNCED" "bool" "1=NTP in sync"
 # ===========================================================================
 section "Hardware Temperature"
 
-TEMP_CRIT_COUNT=0; TEMP_WARN_COUNT=0; IDX=0
+TEMP_CRIT_COUNT=0; TEMP_WARN_COUNT=0; TEMP_SUSPECT_COUNT=0; IDX=0
+
+# Temperatures below this value (°C) are treated as bogus sensor readings.
+# Genuine hardware sensors on Linux systems should never report below -40°C.
+# Negative readings are almost always a misinterpreted register or a driver
+# returning an error code (e.g. -128°C is a common IPMI/ACPI sentinel).
+# Override via env: TEMP_FLOOR=-50 sudo ./system_health_check.sh
+TEMP_FLOOR="${TEMP_FLOOR:--40}"
+
+# _eval_temp <label> <float_value> <int_value>
+# Central threshold logic — call from both the sensors and thermal_zone paths.
+_eval_temp() {
+    local lbl="$1" tc="$2" ti="$3"
+
+    metric "temp_${IDX}_label" "$lbl" ""   "Sensor name"
+    metric "temp_${IDX}_c"     "$tc"  "°C" "Temperature"
+
+    if (( ti < TEMP_FLOOR )); then
+        # Almost certainly a driver artifact or error sentinel, not a real reading.
+        # Record it in metrics but do not raise an alert — just note it.
+        info "  ${DIM}${lbl}: ${tc}°C  (suspect — below floor ${TEMP_FLOOR}°C, skipping alert)${RESET}"
+        metric "temp_${IDX}_suspect" "1" "bool" "Flagged as suspect reading"
+        TEMP_SUSPECT_COUNT=$(( TEMP_SUSPECT_COUNT + 1 ))
+    elif (( ti >= 85 )); then
+        info "  ${lbl}: ${tc}°C"
+        crit "${lbl}: ${tc}°C"
+        TEMP_CRIT_COUNT=$(( TEMP_CRIT_COUNT + 1 ))
+    elif (( ti >= 70 )); then
+        info "  ${lbl}: ${tc}°C"
+        warn "${lbl}: ${tc}°C"
+        TEMP_WARN_COUNT=$(( TEMP_WARN_COUNT + 1 ))
+    else
+        info "  ${lbl}: ${tc}°C"
+        ok "${lbl}: ${tc}°C"
+    fi
+
+    IDX=$(( IDX + 1 ))
+}
 
 if cmd_exists sensors; then
     while IFS= read -r line; do
         T=$(grep -oP '[+-]?[0-9]+\.[0-9]+(?=°C)' <<< "$line" | head -1 || true)
         [[ -z "$T" ]] && continue
         LBL=$(awk -F: '{print $1}' <<< "$line" | xargs | tr ' /()+' '_____')
-        TI=${T%.*}; TI=${TI#-}
-        info "  ${LBL}: ${T}°C"
-        metric "temp_${IDX}_label" "$LBL" ""   "Sensor name"
-        metric "temp_${IDX}_c"     "$T"   "°C" "Temperature"
-        if   (( TI >= 85 )); then crit "${LBL}: ${T}°C"; TEMP_CRIT_COUNT=$(( TEMP_CRIT_COUNT+1 ))
-        elif (( TI >= 70 )); then warn "${LBL}: ${T}°C"; TEMP_WARN_COUNT=$(( TEMP_WARN_COUNT+1 ))
-        else ok "${LBL}: ${T}°C"; fi
-        IDX=$(( IDX + 1 ))
+        # Integer part preserving sign — do NOT strip the minus before comparing
+        TI=$(awk "BEGIN{printf \"%d\", $T}")
+        _eval_temp "$LBL" "$T" "$TI"
     done < <(sensors 2>/dev/null | grep -E "°C" || true)
 elif ls /sys/class/thermal/thermal_zone*/temp &>/dev/null 2>&1; then
     for zone in /sys/class/thermal/thermal_zone*/; do
@@ -866,19 +1007,18 @@ elif ls /sys/class/thermal/thermal_zone*/temp &>/dev/null 2>&1; then
         ZR=$(cat "${zone}temp" 2>/dev/null || echo 0)
         ZC=$(awk "BEGIN{printf \"%.1f\", ${ZR}/1000}")
         ZI=$(( ZR / 1000 ))
-        info "  ${ZN}: ${ZC}°C"
-        metric "temp_${IDX}_label" "$ZN" ""   "Thermal zone"
-        metric "temp_${IDX}_c"     "$ZC" "°C" "Temperature"
-        if   (( ZI >= 85 )); then crit "${ZN}: ${ZC}°C"; TEMP_CRIT_COUNT=$(( TEMP_CRIT_COUNT+1 ))
-        elif (( ZI >= 70 )); then warn "${ZN}: ${ZC}°C"; TEMP_WARN_COUNT=$(( TEMP_WARN_COUNT+1 ))
-        else ok "${ZN}: ${ZC}°C"; fi
-        IDX=$(( IDX + 1 ))
+        _eval_temp "$ZN" "$ZC" "$ZI"
     done
 else
     info "No temperature sensors found (install lm-sensors)"
 fi
-metric "temp_crit_count" "$TEMP_CRIT_COUNT" "" "Sensors > 85°C"
-metric "temp_warn_count" "$TEMP_WARN_COUNT" "" "Sensors 70-85°C"
+metric "temp_crit_count"    "$TEMP_CRIT_COUNT"    "" "Sensors > 85°C"
+metric "temp_warn_count"    "$TEMP_WARN_COUNT"    "" "Sensors 70-85°C"
+metric "temp_suspect_count" "$TEMP_SUSPECT_COUNT" "" "Suspect/bogus sensor readings"
+
+if (( TEMP_SUSPECT_COUNT > 0 )); then
+    warn "${TEMP_SUSPECT_COUNT} suspect temperature reading(s) below ${TEMP_FLOOR}°C — likely sensor artifact, not alerted"
+fi
 
 # ===========================================================================
 # 15. FILE DESCRIPTORS
@@ -983,18 +1123,6 @@ else                              crit "JSON file missing or empty!"; fi
 # ===========================================================================
 # SUMMARY BANNER
 # ===========================================================================
-echo
-echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════╗${RESET}"
-echo -e "${BOLD}${CYAN}║                      HEALTH SUMMARY                         ║${RESET}"
-echo -e "${BOLD}${CYAN}╠══════════════════════════════════════════════════════════════╣${RESET}"
-printf  "${BOLD}${CYAN}║${RESET}  %-62s${BOLD}${CYAN}║${RESET}\n" "Host:     ${THIS_HOST}"
-printf  "${BOLD}${CYAN}║${RESET}  %-62s${BOLD}${CYAN}║${RESET}\n" "Date:     ${REPORT_DATE}"
-echo -e "${BOLD}${CYAN}╠══════════════════════════════════════════════════════════════╣${RESET}"
-printf  "${BOLD}${CYAN}║${RESET}  ${GREEN}%-62s${BOLD}${CYAN}║${RESET}\n"  "Passed    : ${CHECKS_PASSED}"
-printf  "${BOLD}${CYAN}║${RESET}  ${YELLOW}%-62s${BOLD}${CYAN}║${RESET}\n" "Warnings  : ${WARNINGS}"
-printf  "${BOLD}${CYAN}║${RESET}  ${RED}%-62s${BOLD}${CYAN}║${RESET}\n"    "Criticals : ${CRITICALS}"
-printf  "${BOLD}${CYAN}║${RESET}  %-62s${BOLD}${CYAN}║${RESET}\n" "Metrics   : ${#M_KEYS[@]} values captured"
-echo -e "${BOLD}${CYAN}╠══════════════════════════════════════════════════════════════╣${RESET}"
 
 case "$OVERALL_STATUS" in
     CRITICAL) OD="${RED}CRITICAL — Immediate attention required${RESET}" ;;
@@ -1002,12 +1130,21 @@ case "$OVERALL_STATUS" in
     *)        OD="${GREEN}HEALTHY  — All checks passed${RESET}" ;;
 esac
 
-printf "${BOLD}${CYAN}║${RESET}  Overall: %-53b${BOLD}${CYAN}║${RESET}\n" "${OD}"
-echo -e "${BOLD}${CYAN}╠══════════════════════════════════════════════════════════════╣${RESET}"
-printf  "${BOLD}${CYAN}║${RESET}  ${DIM}%-62s${BOLD}${CYAN}║${RESET}\n" "Log  : ${LOG_FILE}"
-printf  "${BOLD}${CYAN}║${RESET}  ${DIM}%-62s${BOLD}${CYAN}║${RESET}\n" "CSV  : ${METRICS_CSV}"
-printf  "${BOLD}${CYAN}║${RESET}  ${DIM}%-62s${BOLD}${CYAN}║${RESET}\n" "JSON : ${METRICS_JSON}"
-echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════╝${RESET}"
+box_banner "$CYAN" "HEALTH SUMMARY" \
+    "Host     : ${THIS_HOST}" \
+    "Date     : ${REPORT_DATE}" \
+    "=" \
+    "~${GREEN}Passed    : ${CHECKS_PASSED}${RESET}" \
+    "~${YELLOW}Warnings  : ${WARNINGS}${RESET}" \
+    "~${RED}Criticals : ${CRITICALS}${RESET}" \
+    "Metrics   : ${#M_KEYS[@]} values captured" \
+    "=" \
+    "~Overall  : ${OD}" \
+    "=" \
+    "~${DIM}Log  : ${LOG_FILE}${RESET}" \
+    "~${DIM}CSV  : ${METRICS_CSV}${RESET}" \
+    "~${DIM}JSON : ${METRICS_JSON}${RESET}"
+
 echo
 
 exit ${EXIT_CODE}
