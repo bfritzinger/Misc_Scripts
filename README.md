@@ -20,6 +20,7 @@ A collection of utility scripts for various system administration and automation
 | Health Check | A single-file bash script that performs a comprehensive system health check and simultaneously exports every measured value to a **CSV** (for trend analysis) and a **JSON snapshot** (for tooling integration). Run it on a schedule and pipe the CSV into pandas, Grafana, Excel, or gnuplot to watch metrics evolve over time | [README](./HealthCheck/README.md) |
 | Chowned Thottled | A performance-conscious bash script for recursively changing file ownership across multiple directories on high-throughput systems. Designed to run safely alongside active workloads by controlling CPU and I/O priority, batching filesystem operations to avoid argument list limits, and skipping files that are already correctly owned | [README](./chown_throttled/README.md) |
 | Linux Troubleshooting | A comprehensive, interactive shell script for diagnosing and troubleshooting x86_64 Linux servers. Covers 15 diagnostic modules ranging from hardware inventory and network connection analysis to Kubernetes cluster health and security auditing — all from a single script with no external dependencies beyond standard Linux tooling | [README](./LinuxTroubleshooting/README.md) |
+| File Retention (Age Off) | A config-driven bash script for age-based file cleanup across multiple directories. Each directory can have its own retention policy, glob pattern, and recursion setting — all managed from a single config file without touching the script itself | [README](./File_retention/README.md) |
 
 
 ## Quick Start
@@ -119,6 +120,10 @@ Misc_Scripts/
 └── LinuxTroubleshooting
     ├── README.md
     └── linux_troubleshoot.sh
+└── File_retention
+    ├── README.md
+    └── file_retention.sh
+    └── file_retention.conf
 
     
 
