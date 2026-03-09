@@ -5,7 +5,10 @@
 #          Containers, Kubernetes/k3s, Services, Hardware, and Kernel
 # =============================================================================
 
-set -uo pipefail
+# Note: intentionally NOT using set -e or pipefail — this is a diagnostic
+# script that runs many optional commands which may legitimately fail or
+# produce no output. The run() helper handles per-command error reporting.
+set -u  # still catch undefined variable references
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'
@@ -33,7 +36,8 @@ LOG_FILE=""
 
 init_log() {
     local ts; ts=$(date +%Y%m%d_%H%M%S)
-    LOG_FILE="/tmp/troubleshoot_${ts}.log"
+    local hn; hn=$(hostname -s 2>/dev/null || hostname)
+    LOG_FILE="/tmp/${hn}_troubleshoot_${ts}.log"
     exec > >(tee -a "$LOG_FILE") 2>&1
     ok "Logging to: $LOG_FILE"
 }
@@ -180,7 +184,7 @@ mod_disk() {
     section "SMART Status (if available)"
     if cmd_exists smartctl; then
         for dev in /dev/sd? /dev/nvme?; do
-            [[ -b "$dev" ]] && { echo "→ $dev"; smartctl -H "$dev" 2>/dev/null | grep -E 'result|Status|PASSED|FAILED'; }
+            [[ -b "$dev" ]] && { echo "→ $dev"; smartctl -H "$dev" 2>/dev/null | grep -E 'result|Status|PASSED|FAILED' || true; }
         done
     else
         warn "smartctl not found — install smartmontools"
@@ -264,10 +268,10 @@ mod_network() {
     fi
 
     section "nftables"
-    cmd_exists nft && run "nft list ruleset 2>/dev/null | head -60" || true
+    cmd_exists nft && run "nft list ruleset 2>/dev/null | head -60"
 
     section "UFW Status"
-    cmd_exists ufw && run "ufw status verbose 2>/dev/null" || true
+    cmd_exists ufw && run "ufw status verbose 2>/dev/null"
 
     section "Network Sysctl"
     run "sysctl -a 2>/dev/null | grep -E 'net\.(ipv4|ipv6)\.(tcp_|udp_|ip_forward|conf\.all)' | sort | head -40"
@@ -276,8 +280,8 @@ mod_network() {
     run "ip netns list 2>/dev/null"
 
     section "Wireless (if present)"
-    cmd_exists iwconfig && run "iwconfig 2>/dev/null" || true
-    cmd_exists iw       && run "iw dev 2>/dev/null"   || true
+    cmd_exists iwconfig && run "iwconfig 2>/dev/null"
+    cmd_exists iw       && run "iw dev 2>/dev/null"  
 
     section "Connectivity Tests"
     for _ping_host in $PING_TEST_HOSTS; do
@@ -290,11 +294,11 @@ mod_network() {
 
     section "Bonding / Teaming"
     run "cat /proc/net/bonding/* 2>/dev/null | head -40 || true"
-    cmd_exists teamdctl && run "teamdctl --list 2>/dev/null" || true
+    cmd_exists teamdctl && run "teamdctl --list 2>/dev/null"
 
     section "Bandwidth (if nload/iftop available)"
-    cmd_exists nload  && warn "nload available — run manually for live bandwidth"
-    cmd_exists iftop  && warn "iftop available — run manually for live bandwidth"
+    cmd_exists nload   && warn "nload available — run manually for live bandwidth"  
+    cmd_exists iftop   && warn "iftop available — run manually for live bandwidth"  
     cmd_exists nethogs && warn "nethogs available — run manually for per-process bandwidth"
 }
 
@@ -487,10 +491,10 @@ mod_security() {
 
     section "SELinux"
     cmd_exists getenforce && run "getenforce"    || warn "SELinux not present"
-    cmd_exists sestatus   && run "sestatus"      || true
+    cmd_exists sestatus   && run "sestatus"     
 
     section "AppArmor"
-    cmd_exists apparmor_status && run "apparmor_status 2>/dev/null" || true
+    cmd_exists apparmor_status && run "apparmor_status 2>/dev/null"
     cmd_exists aa-status        && run "aa-status 2>/dev/null"       || warn "AppArmor not present"
 
     section "Auditd"
@@ -836,6 +840,7 @@ toggle_log() {
 # If args provided, run those modules non-interactively
 if [[ $# -gt 0 ]]; then
     require_root
+    init_log
     for arg in "$@"; do
         dispatch "$arg"
     done
@@ -844,6 +849,7 @@ fi
 
 # Interactive mode
 require_root
+init_log
 while true; do
     show_menu
     read -rp "  Choice: " choice
