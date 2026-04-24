@@ -9,7 +9,7 @@ A collection of utility scripts for various system administration and automation
 | Cluster SSH Key Setup | Automates SSH key distribution across a cluster of nodes | [README](./cluster-ssh-key-setup/README.md) |
 | Cluster System Update | Runs apt update/upgrade in parallel across cluster nodes | [README](./cluster-system-update/README.md) |
 | Docker Image Update | Automates the process of updating a running Docker container | [README](./docker-container-update/README.md) |
-| Cloudflare IP Logger | A reverse proxy that logs visitor IPs from Cloudflare Tunnel traffic | [README](./cloudflare_ip_logger/README.md) |
+| Cloudflare IP Logger | A reverse proxy that logs visitor IPs from Cloudflare Tunnel traffic | [README](./cloudflare-ip-logger/README.md) |
 | Ollama Model Updater | Checks for updates to available models on ollama.ai and installs them automatically | [README](./ollama-updater/README.md) |
 | Git Update | A bash script to interactively manage Git repositories across GitHub and GitLab with clone, fetch, and push operations—individually or in batch.| [README](./git-update/README.md) |
 | Power & Temp Monitor | Monitor temperature, voltage, power, and throttling status on Raspberry Pi, Nvidia Jetson, and x86 systems using Prometheus and Alertmanager | [README](./pwr-temp-monitor/README.md) |
