@@ -22,7 +22,7 @@ A collection of utility scripts for various system administration and automation
 | Linux Troubleshooting | A comprehensive, interactive shell script for diagnosing and troubleshooting x86_64 Linux servers. Covers 15 diagnostic modules ranging from hardware inventory and network connection analysis to Kubernetes cluster health and security auditing — all from a single script with no external dependencies beyond standard Linux tooling | [README](./LinuxTroubleshooting/README.md) |
 | File Retention (Age Off) | A config-driven bash script for age-based file cleanup across multiple directories. Each directory can have its own retention policy, glob pattern, and recursion setting — all managed from a single config file without touching the script itself | [README](./File_retention/README.md) |
 | Dir Sync | A lightweight Python script that compares two directories and copies only the changed or new files (deltas) from source to destination. No external dependencies — stdlib only | [README](./dirsync/README.md) |
-
+| VSCode-Extension-Install | Standardized VS Code extension setup for dev team. Run one script and your editor matches the rest of the team's tooling. | [README](./VSCode-Extension-Install/README.md) |
 ## Quick Start
 
 Each script lives in its own directory with dedicated documentation. Click the README link above for usage instructions.
@@ -127,10 +127,17 @@ Misc_Scripts/
 └── Dir Sync
     ├── README.md
     └── dirsync.py
+└── VSCode-Extension-Install
+    ├── README.md
+    └── extensions.txt
+    └── install-extensions.sh
+    └── install-extensions.ps1
+    └── install-extensions.bat
+    └── uninstall-extemsopms.sh
+    └── uninstall-extemsopms.ps1
+    └── uninstall-extemsopms.bat
 
     
-
-
 ```
 
 ## Adding New Scripts
