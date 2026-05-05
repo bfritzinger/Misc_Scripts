@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Universal Metrics Setup Script
 # Detects system type and installs appropriate metrics collector
 

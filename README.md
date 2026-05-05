@@ -1,5 +1,8 @@
 # Misc Scripts
 
+[![CI](https://github.com/bfritzinger/Misc_Scripts/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bfritzinger/Misc_Scripts/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A collection of utility scripts for various system administration and automation tasks.
 
 ## Scripts
@@ -18,7 +21,7 @@ A collection of utility scripts for various system administration and automation
 | Dot Files | Personal configuration files for setting up a new Linux system.| [README](./dotfiles/README.md) |
 | Hung Connections | A utility for detecting and terminating hung network connections on Unix-based systems. Available in both Python and Bash | [README](./HungConnections/README.md) |
 | Health Check | A single-file bash script that performs a comprehensive system health check and simultaneously exports every measured value to a **CSV** (for trend analysis) and a **JSON snapshot** (for tooling integration). Run it on a schedule and pipe the CSV into pandas, Grafana, Excel, or gnuplot to watch metrics evolve over time | [README](./HealthCheck/README.md) |
-| Chowned Thottled | A performance-conscious bash script for recursively changing file ownership across multiple directories on high-throughput systems. Designed to run safely alongside active workloads by controlling CPU and I/O priority, batching filesystem operations to avoid argument list limits, and skipping files that are already correctly owned | [README](./chown_throttled/README.md) |
+| Chown Throttled | A performance-conscious bash script for recursively changing file ownership across multiple directories on high-throughput systems. Designed to run safely alongside active workloads by controlling CPU and I/O priority, batching filesystem operations to avoid argument list limits, and skipping files that are already correctly owned | [README](./chown_throttled/README.md) |
 | Linux Troubleshooting | A comprehensive, interactive shell script for diagnosing and troubleshooting x86_64 Linux servers. Covers 15 diagnostic modules ranging from hardware inventory and network connection analysis to Kubernetes cluster health and security auditing — all from a single script with no external dependencies beyond standard Linux tooling | [README](./LinuxTroubleshooting/README.md) |
 | File Retention (Age Off) | A config-driven bash script for age-based file cleanup across multiple directories. Each directory can have its own retention policy, glob pattern, and recursion setting — all managed from a single config file without touching the script itself | [README](./File_retention/README.md) |
 | Dir Sync | A lightweight Python script that compares two directories and copies only the changed or new files (deltas) from source to destination. No external dependencies — stdlib only | [README](./dirsync/README.md) |
@@ -47,37 +50,76 @@ Misc_Scripts/
 ├── LICENSE
 ├── _template/
 │   └── README.md
+├── File_retention/
+│   ├── README.md
+│   ├── file_retention.conf
+│   └── file_retention.sh
+├── HealthCheck/
+│   ├── README.md
+│   ├── metrics-dashboard.html
+│   └── system_health_check.sh
+├── HungConnections/
+│   ├── README.md
+│   ├── hung_conn_dashboard.html
+│   ├── hung_connection_killer.py
+│   └── hung_connection_killer.sh
+├── LinuxTroubleshooting/
+│   ├── README.md
+│   ├── linux_troubleshoot.sh
+│   └── linux_troubleshoot_dashboard.html
+├── alias-dist/
+│   ├── README.md
+│   └── alias-dist.sh
+├── chown_throttled/
+│   ├── README.md
+│   └── chown_throttled.sh
+├── cloudflare-ip-logger/
+│   ├── README.md
+│   ├── Dockerfile
+│   ├── cf-log-parser.service
+│   ├── cmd/
+│   │   └── logparser/
+│   │       └── main.go
+│   ├── docker-compose.cloudflared.yml
+│   ├── docker-compose.yml
+│   ├── go.mod
+│   ├── main.go
+│   ├── proxy-config.json.example
+│   └── run-with-logging.sh
 ├── cluster-ssh-key-setup/
 │   ├── README.md
 │   └── cluster-sshKey-setup.sh
-└── cluster-system-update/
+├── cluster-system-update/
+│   ├── README.md
+│   └── update-sys.sh
+├── dirsync/
+│   ├── README.md
+│   └── dirsync.py
+├── docker-container-update/
+│   ├── README.md
+│   └── docker-container-update.sh
+├── dotfiles/
+│   ├── README.md
+│   └── bootstrap.sh
+├── git-update/
+│   ├── README.md
+│   └── git-update.sh
+├── github-star-repos/
+│   ├── README.md
+│   └── github-stars.py
+├── ollama-updater/
+│   ├── README.md
+│   └── ollama-updater.py
+└── pwr-temp-monitor/
     ├── README.md
-    └── update-sys.sh
-└── docker-container-update/
-    ├── README.md
-    └── docker-container-update.sh
-└── cloudflare-ip-logger/
-    ├── cmd
-        ├── logparser
-            ├── main.go
-    ├── README.md
-    └── cd-log-parser.service
-    └── docker-compose.cloudflared.yml
-    └── docker-compose.yml
-    └── Dokerfile
-    └── go.mod
-    └── main.go
-    └── proxy-config.json.example
-    └── run-with-logging.sh
-└── ollama-updater/
-    ├── README.md
-    └── ollama-updater.py
-└── git-update/
-    ├── README.md
-    └── git-update.sh
-└── pwr-tmp-monitor/
-    ├── README.md
-    └── setup.sh
+    ├── NODE_EXPORTER_SETUP.md
+    ├── alertmanager.yml
+    ├── deploy_to_nodes.sh
+    ├── grafana-dashboard.json
+    ├── jetson_metrics.sh
+    ├── pi_alerts.yml
+    ├── pi_metrics.sh
+    ├── setup.sh
     └── x86_metrics.sh
     └── jetson_metrics.sh
     └── pi_metrics.sh
@@ -150,6 +192,23 @@ Misc_Scripts/
 2. Add your script and update the README inside the new directory
 
 3. Update this main README to include your new script in the table above
+
+## Continuous Integration
+
+Every push and pull request runs through a GitHub Actions pipeline that exercises the whole repo:
+
+| Job | Tool | What it covers |
+|-----|------|----------------|
+| `shellcheck` | [ShellCheck](https://www.shellcheck.net) | All `*.sh` scripts (errors only — warnings tracked separately) |
+| `python` | `py_compile` + [ruff](https://docs.astral.sh/ruff/) | Byte-compiles every `.py` file and lints with the rules in `ruff.toml` |
+| `go` | `go vet` / `gofmt` / `go build` / `go test` | The `cloudflare-ip-logger` Go module |
+| `hadolint` | [Hadolint](https://github.com/hadolint/hadolint) | The `cloudflare-ip-logger` Dockerfile |
+| `docker-build` | `docker buildx` | Builds the cf-ip-logger image as a smoke test |
+| `yaml` | [yamllint](https://yamllint.readthedocs.io) | All YAML files (config in `.yamllint.yml`) |
+
+The release pipeline (`.github/workflows/release.yml`) fires on `cf-ip-logger-vX.Y.Z` tags and publishes a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/<owner>/cf-ip-logger`.
+
+Dependabot watches Go modules, the Dockerfile base image, and the GitHub Actions versions weekly (`.github/dependabot.yml`).
 
 ## License
 

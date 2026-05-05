@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Pi Metrics Collector for Prometheus Node Exporter Textfile Collector
 # Place output in /var/lib/node_exporter/textfile_collector/
 

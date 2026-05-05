@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Kubernetes Cluster SSH Mesh Setup
 # Automates SSH key distribution and /etc/hosts synchronization

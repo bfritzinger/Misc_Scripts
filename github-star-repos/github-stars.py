@@ -5,7 +5,6 @@ import requests
 import json
 from collections import Counter
 from datetime import datetime
-from pathlib import Path
 import unicodedata
 
 # Configure these
@@ -22,25 +21,25 @@ def get_starred_repos(username, token=None):
     repos = []
     page = 1
     headers = {"Accept": "application/vnd.github.v3.star+json"}  # Includes starred_at timestamp
-    
+
     if token:
         headers["Authorization"] = f"token {token}"
-    
+
     while True:
         url = f"https://api.github.com/users/{username}/starred"
         params = {"page": page, "per_page": 100}
-        
+
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
-        
+
         data = response.json()
         if not data:
             break
-        
+
         repos.extend(data)
         page += 1
         print(f"Fetched page {page - 1} ({len(repos)} repos so far)")
-    
+
     return repos
 
 
@@ -52,7 +51,7 @@ def export_to_json(repos, filename):
         "total_count": len(repos),
         "repositories": []
     }
-    
+
     for item in repos:
         # Handle both formats (with and without starred_at)
         if "repo" in item:
@@ -61,7 +60,7 @@ def export_to_json(repos, filename):
         else:
             r = item
             starred_at = None
-        
+
         repo_data = {
             "name": r["full_name"],
             "description": r.get("description"),
@@ -81,10 +80,10 @@ def export_to_json(repos, filename):
             "homepage": r.get("homepage"),
         }
         export_data["repositories"].append(repo_data)
-    
+
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(export_data, f, indent=2, ensure_ascii=False)
-    
+
     print(f"\n💾 Exported to {filename}")
     return export_data
 
@@ -118,7 +117,7 @@ def pad_line(content, total_width):
 def print_recap(export_data):
     """Print a nicely formatted recap to screen."""
     repos = export_data["repositories"]
-    
+
     # Header
     print("\n")
     print("+" + "=" * 70 + "+")
@@ -127,7 +126,7 @@ def print_recap(export_data):
     print("|" + pad_line(f"  Total: {len(repos)} repositories", 70) + "|")
     print("|" + pad_line(f"  Exported: {export_data['exported_at'][:19]}", 70) + "|")
     print("+" + "=" * 70 + "+")
-    
+
     # Languages breakdown
     languages = Counter(r["language"] for r in repos if r["language"])
     print("\n+" + "-" * 50 + "+")
@@ -138,7 +137,7 @@ def print_recap(export_data):
         line = f"  {lang}: {count} {bar}"
         print("|" + pad_line(line, 50) + "|")
     print("+" + "-" * 50 + "+")
-    
+
     # Most popular repos
     by_stars = sorted(repos, key=lambda r: r["stars"], reverse=True)[:10]
     print("\n+" + "-" * 70 + "+")
@@ -150,7 +149,7 @@ def print_recap(export_data):
         line = f"  {name:<45} ⭐ {stars:>10}"
         print("|" + pad_line(line, 70) + "|")
     print("+" + "-" * 70 + "+")
-    
+
     # Recently updated
     by_updated = sorted(repos, key=lambda r: r["updated_at"] or "", reverse=True)[:10]
     print("\n+" + "-" * 70 + "+")
@@ -162,7 +161,7 @@ def print_recap(export_data):
         line = f"  {name:<55} {updated}"
         print("|" + pad_line(line, 70) + "|")
     print("+" + "-" * 70 + "+")
-    
+
     # Topics
     all_topics = []
     for r in repos:
@@ -176,12 +175,12 @@ def print_recap(export_data):
             line = f"  {topic}: {count}"
             print("|" + pad_line(line, 50) + "|")
         print("+" + "-" * 50 + "+")
-    
+
     # Stats summary
     archived = sum(1 for r in repos if r["archived"])
     orgs = sum(1 for r in repos if r["owner_type"] == "Organization")
     users = len(repos) - orgs
-    
+
     print("\n+" + "-" * 40 + "+")
     print("|" + pad_line("  📈 QUICK STATS", 40) + "|")
     print("+" + "-" * 40 + "+")
@@ -191,13 +190,13 @@ def print_recap(export_data):
     print("|" + pad_line(f"  💻 Languages: {len(languages)}", 40) + "|")
     print("|" + pad_line(f"  🔖 Topics: {len(topics)}", 40) + "|")
     print("+" + "-" * 40 + "+")
-    
+
     # Full list
     print("\n")
     print("+" + "=" * 78 + "+")
     print("|" + pad_line("  📋 ALL STARRED REPOS", 78) + "|")
     print("+" + "=" * 78 + "+")
-    
+
     for r in sorted(repos, key=lambda r: r["name"].lower()):
         print()
         print(f"  📁 {r['name']}")
@@ -210,7 +209,7 @@ def print_recap(export_data):
             stats += "  📦 ARCHIVED"
         print(stats)
         print(f"     🔗 {r['url']}")
-    
+
     print("\n" + "-" * 78)
     print(f"⭐ Total: {len(repos)} starred repositories")
     print("-" * 78)
@@ -219,10 +218,10 @@ def print_recap(export_data):
 def main():
     print(f"Fetching starred repos for {GITHUB_USERNAME}...")
     repos = get_starred_repos(GITHUB_USERNAME, GITHUB_TOKEN)
-    
+
     # Export to JSON
     export_data = export_to_json(repos, OUTPUT_JSON)
-    
+
     # Print formatted recap
     print_recap(export_data)
 

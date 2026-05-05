@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # distribute-aliases.sh
 # Distributes bash aliases to all nodes listed in /etc/hosts

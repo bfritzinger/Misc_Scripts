@@ -1,0 +1,15 @@
+extends: relaxed
+
+ignore: |
+  .git/
+  cloudflare-ip-logger/docker-compose.cloudflared.yml
+
+rules:
+  line-length: disable
+  trailing-spaces: disable
+  comments: disable
+  document-start: disable
+  empty-lines:
+    max: 2
+  truthy:
+    check-keys: false

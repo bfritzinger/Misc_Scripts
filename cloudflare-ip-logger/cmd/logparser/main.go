@@ -16,27 +16,27 @@ import (
 
 // CloudflaredLogEntry represents a JSON log line from cloudflared
 type CloudflaredLogEntry struct {
-	Time       string `json:"time"`
-	Level      string `json:"level"`
-	Message    string `json:"message"`
-	Msg        string `json:"msg"`
-	Origin     string `json:"originURL"`
-	ClientIP   string `json:"clientIP"`
-	CFRay      string `json:"cfRay"`
-	IP         string `json:"ip"`
-	Location   string `json:"location"`
-	FlowID     string `json:"flowId"`
-	Dest       string `json:"dest"`
-	Rule       int    `json:"ingressRule"`
-	Hostname   string `json:"hostname"`
-	Error      string `json:"error"`
-	ConnIndex  int    `json:"connIndex"`
-	TraceID    string `json:"traceId"`
-	Status     int    `json:"status"`
-	Duration   int64  `json:"duration"`
-	Method     string `json:"method"`
-	Path       string `json:"path"`
-	RuleName   string `json:"ruleName"`
+	Time      string `json:"time"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+	Msg       string `json:"msg"`
+	Origin    string `json:"originURL"`
+	ClientIP  string `json:"clientIP"`
+	CFRay     string `json:"cfRay"`
+	IP        string `json:"ip"`
+	Location  string `json:"location"`
+	FlowID    string `json:"flowId"`
+	Dest      string `json:"dest"`
+	Rule      int    `json:"ingressRule"`
+	Hostname  string `json:"hostname"`
+	Error     string `json:"error"`
+	ConnIndex int    `json:"connIndex"`
+	TraceID   string `json:"traceId"`
+	Status    int    `json:"status"`
+	Duration  int64  `json:"duration"`
+	Method    string `json:"method"`
+	Path      string `json:"path"`
+	RuleName  string `json:"ruleName"`
 }
 
 // Regex patterns for non-JSON logs
@@ -250,7 +250,7 @@ func (p *LogParser) insertConnection(timestamp, clientIP, country, method, path,
 		INSERT INTO connections (timestamp, client_ip, country, method, path, host, user_agent, referer)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		timestamp, clientIP, country, method, path, host, userAgent, referer)
-	
+
 	if err != nil {
 		log.Printf("Failed to insert: %v", err)
 		return

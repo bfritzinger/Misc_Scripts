@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # x86 Metrics Collector for Prometheus Node Exporter Textfile Collector
 
 OUTPUT_DIR="/var/lib/node_exporter/textfile_collector"

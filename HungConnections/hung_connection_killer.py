@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Hung Connection Killer
 ======================
@@ -374,7 +375,7 @@ class HungConnectionKiller:
                 # Without timer info, flag states that are typically problematic
                 if conn.state == 'CLOSE_WAIT':
                     # CLOSE_WAIT with no timer is suspicious - app should have closed
-                    return True, f"CLOSE_WAIT without active timer (likely app not closing socket)"
+                    return True, "CLOSE_WAIT without active timer (likely app not closing socket)"
                 elif conn.state in ('FIN_WAIT1', 'FIN_WAIT2', 'CLOSING', 'LAST_ACK'):
                     # These should have timers; if not, they may be stuck
                     return True, f"{conn.state} state detected (typically indicates hung connection)"
@@ -397,7 +398,7 @@ class HungConnectionKiller:
         # Check port inclusions
         if self.include_only_ports:
             if conn.local_port not in self.include_only_ports and conn.remote_port not in self.include_only_ports:
-                return True, f"Port not in include list"
+                return True, "Port not in include list"
 
         # Check process exclusions
         if conn.process_name:
@@ -450,9 +451,9 @@ class HungConnectionKiller:
         cmd = [
             'ss', '-K',
             'dst', f'{conn.remote_addr}',
-            'dport', f'eq', str(conn.remote_port),
+            'dport', 'eq', str(conn.remote_port),
             'src', f'{conn.local_addr}',
-            'sport', f'eq', str(conn.local_port),
+            'sport', 'eq', str(conn.local_port),
         ]
 
         returncode, stdout, stderr = self._run_command(cmd)
