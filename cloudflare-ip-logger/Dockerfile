@@ -4,14 +4,15 @@ FROM golang:1.21-bookworm AS builder
 WORKDIR /build
 
 # Install SQLite dependencies for CGO
-RUN apt-get update && apt-get install -y gcc libsqlite3-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY go.mod go.sum* ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY *.go ./
-
-RUN go mod tidy
 
 # Build main app
 RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o cf-ip-logger .

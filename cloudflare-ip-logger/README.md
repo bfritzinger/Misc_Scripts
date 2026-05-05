@@ -147,6 +147,26 @@ Data is stored in `/data`:
 - `connections.log` - Plain text log file  
 - `proxy-config.json` - Backend routing config
 
+## Companion Tool: cf-log-parser
+
+A separate binary in `cmd/logparser/` that ingests `cloudflared`'s own JSON logs into the same SQLite database used by the proxy. Useful when you want to capture connection metadata that cloudflared sees but never reaches the proxy (denied by Access, served from Cloudflare's cache, etc.).
+
+Build and use:
+
+```bash
+go build -o cf-log-parser ./cmd/logparser
+
+# Pipe cloudflared logs into the parser:
+./run-with-logging.sh
+
+# Or as a systemd unit alongside an existing cloudflared service:
+sudo cp cf-log-parser /usr/local/bin/
+sudo cp cf-log-parser.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now cf-log-parser
+```
+
+See `cf-log-parser.service` for the unit file and `run-with-logging.sh` for the standalone wrapper.
+
 ## Querying SQLite Directly
 
 ```bash
