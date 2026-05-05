@@ -20,3 +20,12 @@ Thumbs.db
 # Temp files
 *.tmp
 *.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Go build artifacts (cloudflare-ip-logger)
+cloudflare-ip-logger/cf-ip-logger
+cloudflare-ip-logger/cf-log-parser

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # run-with-logging.sh
 # Runs cloudflared and pipes logs to the parser
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploy Pi Monitoring to All Nodes
 # Run this from your management machine (where you have SSH access to all Pis)
 

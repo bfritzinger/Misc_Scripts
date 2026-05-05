@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #===============================================================================
 # Bootstrap Script for Linux Environment Setup
 # Author: Brian Fritzinger
