@@ -34,11 +34,11 @@ type ConnectionLog struct {
 }
 
 type IPStats struct {
-	ClientIP   string `json:"client_ip"`
-	Country    string `json:"country"`
-	HitCount   int    `json:"hit_count"`
-	FirstSeen  string `json:"first_seen"`
-	LastSeen   string `json:"last_seen"`
+	ClientIP  string `json:"client_ip"`
+	Country   string `json:"country"`
+	HitCount  int    `json:"hit_count"`
+	FirstSeen string `json:"first_seen"`
+	LastSeen  string `json:"last_seen"`
 }
 
 type ProxyConfig struct {

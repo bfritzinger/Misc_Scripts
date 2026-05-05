@@ -1,6 +1,7 @@
 #===============================================================================
 # .bash_aliases - Alias Definitions
 #===============================================================================
+# shellcheck shell=bash
 
 #-------------------------------------------------------------------------------
 # Navigation
@@ -193,6 +194,7 @@ alias pipinstall='pip install -r requirements.txt'
 alias ping='ping -c 5'
 alias fastping='ping -c 100 -s.2'
 alias myip='curl -s ifconfig.me && echo'
+# shellcheck disable=SC2142  # $1 is awk's, not a shell positional
 alias localip="hostname -I | awk '{print \$1}'"
 alias ips="ip -c a"
 alias listening='netstat -tlnp'
