@@ -1,5 +1,8 @@
 # Misc Scripts
 
+[![CI](https://github.com/bfritzinger/Misc_Scripts/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bfritzinger/Misc_Scripts/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A collection of utility scripts for various system administration and automation tasks.
 
 ## Scripts
@@ -130,6 +133,23 @@ Misc_Scripts/
 2. Add your script and update the README inside the new directory
 
 3. Update this main README to include your new script in the table above
+
+## Continuous Integration
+
+Every push and pull request runs through a GitHub Actions pipeline that exercises the whole repo:
+
+| Job | Tool | What it covers |
+|-----|------|----------------|
+| `shellcheck` | [ShellCheck](https://www.shellcheck.net) | All `*.sh` scripts (errors only — warnings tracked separately) |
+| `python` | `py_compile` + [ruff](https://docs.astral.sh/ruff/) | Byte-compiles every `.py` file and lints with the rules in `ruff.toml` |
+| `go` | `go vet` / `gofmt` / `go build` / `go test` | The `cloudflare-ip-logger` Go module |
+| `hadolint` | [Hadolint](https://github.com/hadolint/hadolint) | The `cloudflare-ip-logger` Dockerfile |
+| `docker-build` | `docker buildx` | Builds the cf-ip-logger image as a smoke test |
+| `yaml` | [yamllint](https://yamllint.readthedocs.io) | All YAML files (config in `.yamllint.yml`) |
+
+The release pipeline (`.github/workflows/release.yml`) fires on `cf-ip-logger-vX.Y.Z` tags and publishes a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/<owner>/cf-ip-logger`.
+
+Dependabot watches Go modules, the Dockerfile base image, and the GitHub Actions versions weekly (`.github/dependabot.yml`).
 
 ## License
 

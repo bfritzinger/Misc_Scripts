@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        env:
+          SHELLCHECK_OPTS: -e SC1091 -x
+        with:
+          severity: error
+          scandir: '.'
+          ignore_paths: >-
+            .git
+            .github
+
+  python:
+    name: Python (compile + ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Discover python files
+        id: pyfiles
+        run: |
+          mapfile -t files < <(git ls-files '*.py')
+          printf '%s\n' "${files[@]}"
+          {
+            echo 'files<<EOF'
+            printf '%s\n' "${files[@]}"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Byte-compile
+        if: steps.pyfiles.outputs.files != ''
+        run: |
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            python -m py_compile "$f"
+          done <<< "${{ steps.pyfiles.outputs.files }}"
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+      - name: Lint with ruff
+        run: ruff check --output-format=github .
+
+  go:
+    name: Go (cloudflare-ip-logger)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare-ip-logger
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cloudflare-ip-logger/go.mod
+          cache-dependency-path: cloudflare-ip-logger/go.sum
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: go mod download
+        run: go mod download
+      - name: go vet
+        run: go vet ./...
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go build
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          go build -ldflags="-s -w" -o cf-ip-logger .
+          go build -o cf-log-parser ./cmd/logparser
+      - name: go test
+        run: go test ./...
+
+  hadolint:
+    name: Hadolint (Dockerfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: cloudflare-ip-logger/Dockerfile
+          config: cloudflare-ip-logger/.hadolint.yaml
+          failure-threshold: warning
+
+  docker-build:
+    name: Docker build (cf-ip-logger)
+    runs-on: ubuntu-latest
+    needs: [go, hadolint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: cloudflare-ip-logger
+          push: false
+          load: true
+          tags: cf-ip-logger:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke-test image
+        run: |
+          docker run --rm --entrypoint /app/cf-ip-logger cf-ip-logger:ci -h 2>&1 || true
+          docker run --rm --entrypoint sh cf-ip-logger:ci -c 'test -x /app/cf-ip-logger && echo OK'
+
+  yaml:
+    name: YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install yamllint==1.35.1
+      - run: yamllint -c .yamllint.yml .
