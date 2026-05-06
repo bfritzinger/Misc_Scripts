@@ -125,7 +125,6 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Smoke-test image
         run: |
-          docker run --rm --entrypoint /app/cf-ip-logger cf-ip-logger:ci -h 2>&1 || true
           docker run --rm --entrypoint sh cf-ip-logger:ci -c 'test -x /app/cf-ip-logger && echo OK'
 
   yaml:
