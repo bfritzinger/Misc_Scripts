@@ -69,7 +69,7 @@ jobs:
         working-directory: cloudflare-ip-logger
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: cloudflare-ip-logger/go.mod
           cache-dependency-path: cloudflare-ip-logger/go.sum
