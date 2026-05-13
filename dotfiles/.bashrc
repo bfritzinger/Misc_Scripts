@@ -170,7 +170,7 @@ extract() {
 # Quick backup of a file
 backup() {
     local src="${1%/}"
-    cp "$src"{,.bak.$(date +%Y%m%d_%H%M%S)}
+    cp -r "$src"{,.bak.$(date +%Y%m%d_%H%M%S)}
 }
 
 # Find process by name
