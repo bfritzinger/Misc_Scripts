@@ -35,8 +35,8 @@ jobs:
     name: Python (compile + ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Discover python files
@@ -69,7 +69,7 @@ jobs:
         working-directory: cloudflare-ip-logger
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: cloudflare-ip-logger/go.mod
           cache-dependency-path: cloudflare-ip-logger/go.sum
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.4.0
         with:
           dockerfile: cloudflare-ip-logger/Dockerfile
           config: cloudflare-ip-logger/.hadolint.yaml
@@ -115,7 +115,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
       - name: Build image (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: cloudflare-ip-logger
           push: false
@@ -131,8 +131,8 @@ jobs:
     name: YAML lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install yamllint==1.35.1
