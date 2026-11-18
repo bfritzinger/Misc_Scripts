@@ -1,35 +1,30 @@
 # Dotfiles
 
-Personal configuration files for setting up a new Linux system.
+Personal configuration files for setting up a new Linux system. This directory
+lives inside the [`miscScripts`](https://github.com/b2fizzle/miscScripts) repo;
+`bootstrap.sh` auto-detects when it's invoked from a checkout, so you can run
+it in-place.
 
 ## Quick Start
 
-### One-liner install (after pushing to GitHub)
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/dotfiles/main/bootstrap.sh | bash
+git clone https://github.com/b2fizzle/miscScripts.git ~/src/miscScripts
+~/src/miscScripts/dotfiles/bootstrap.sh
 ```
 
-### Manual install
-
-```bash
-git clone https://github.com/yourusername/dotfiles.git ~/dotfiles
-cd ~/dotfiles
-chmod +x bootstrap.sh
-./bootstrap.sh
-```
+`curl | bash` is **not** supported — `bootstrap.sh` has interactive prompts and
+needs a TTY (clone first).
 
 ## What's Included
 
 | File | Description |
 |------|-------------|
-| `bootstrap.sh` | Main installation script - installs packages and links configs |
+| `bootstrap.sh` | Main installation script — installs packages and links configs |
 | `.bashrc` | Bash configuration with prompt, functions, and completions |
 | `.bash_aliases` | Comprehensive aliases for common commands |
 | `.vimrc` | Vim configuration with plugins (vim-plug) |
 | `.tmux.conf` | Tmux configuration with better key bindings |
 | `.gitconfig` | Git configuration with aliases and defaults |
-| `.gitignore_global` | Global gitignore patterns |
 
 ## Customization
 
@@ -115,28 +110,23 @@ The bootstrap script detects and handles:
 ## Directory Structure
 
 ```
-~/dotfiles/
+dotfiles/
 ├── bootstrap.sh          # Main installer
 ├── README.md
 ├── .bashrc
 ├── .bash_aliases
-├── .bash_profile
 ├── .vimrc
 ├── .tmux.conf
-├── .gitconfig
-├── .gitignore_global
-├── .ssh/
-│   └── config           # SSH host configurations
-└── .config/
-    └── ...              # Application configs
+└── .gitconfig
 ```
+
+`bootstrap.sh` also handles `.ssh/config` and `.config/*` if you add them.
 
 ## Updating
 
 ```bash
-cd ~/dotfiles
-git pull
-./bootstrap.sh  # Re-run to update symlinks
+cd ~/src/miscScripts && git pull
+./dotfiles/bootstrap.sh  # Re-run to update symlinks (idempotent)
 ```
 
 ## Uninstalling

@@ -2,20 +2,34 @@
 #===============================================================================
 # Bootstrap Script for Linux Environment Setup
 # Author: Brian Fritzinger
-# 
-# Usage: 
-#   curl -fsSL https://raw.githubusercontent.com/yourusername/dotfiles/main/bootstrap.sh | bash
-#   -- or --
-#   git clone https://github.com/yourusername/dotfiles.git ~/dotfiles && ~/dotfiles/bootstrap.sh
+#
+# Usage (interactive — recommended):
+#   git clone https://github.com/b2fizzle/miscScripts.git ~/src/miscScripts
+#   ~/src/miscScripts/dotfiles/bootstrap.sh
+#
+# When invoked from inside a checkout, the script auto-detects DOTFILES_DIR.
+# To override:
+#   DOTFILES_DIR=/path/to/dotfiles ./bootstrap.sh
+#
+# The `curl | bash` pattern doesn't work here — this script has interactive
+# prompts and stdin is consumed by the pipe. Clone first.
 #===============================================================================
 
-set -e  # Exit on error
+set -euo pipefail
 
 #-------------------------------------------------------------------------------
 # Configuration
 #-------------------------------------------------------------------------------
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
-DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yourusername/dotfiles.git}"
+# Auto-detect the dotfiles directory: if this script lives in a directory that
+# already contains the dotfiles, use that. Otherwise default to ~/dotfiles
+# (and clone there if missing).
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$_SCRIPT_DIR/.bashrc" ]; then
+    DOTFILES_DIR="${DOTFILES_DIR:-$_SCRIPT_DIR}"
+else
+    DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
+fi
+DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/b2fizzle/miscScripts.git}"
 LOG_FILE="/tmp/bootstrap_$(date +%Y%m%d_%H%M%S).log"
 
 #-------------------------------------------------------------------------------
@@ -132,7 +146,8 @@ install_docker() {
 
 install_kubectl() {
     if command_exists kubectl; then
-        info "kubectl already installed: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
+        # --short was removed in kubectl 1.28; fall back to bare --client.
+        info "kubectl already installed: $(kubectl version --client 2>/dev/null | head -1)"
         return
     fi
     
@@ -178,21 +193,22 @@ install_helm() {
 #-------------------------------------------------------------------------------
 setup_dotfiles() {
     info "Setting up dotfiles..."
-    
-    # Clone repo if not present
-    if [ ! -d "$DOTFILES_DIR" ]; then
+
+    # Clone repo if not present and we're not already inside one.
+    if [ ! -f "$DOTFILES_DIR/.bashrc" ]; then
+        info "Cloning $DOTFILES_REPO -> $DOTFILES_DIR"
         git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
-    
+
     # Backup existing files
     local backup_dir="$HOME/.dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$backup_dir"
-    
-    # List of dotfiles to symlink
+
+    # List of dotfiles to symlink. Only files that exist in DOTFILES_DIR are
+    # acted on, so adding/removing items here is safe.
     local dotfiles=(
         ".bashrc"
         ".bash_aliases"
-        ".bash_profile"
         ".vimrc"
         ".tmux.conf"
         ".gitconfig"
@@ -241,14 +257,18 @@ setup_ssh() {
     
     # Generate SSH key if not present
     if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
-        read -p "Generate new SSH key? (y/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            read -p "Enter email for SSH key: " ssh_email
-            ssh-keygen -t ed25519 -C "$ssh_email" -f "$HOME/.ssh/id_ed25519"
-            success "SSH key generated"
-            info "Public key:"
-            cat "$HOME/.ssh/id_ed25519.pub"
+        if [ -r /dev/tty ]; then
+            read -p "Generate new SSH key? (y/n): " -n 1 -r REPLY < /dev/tty
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                read -p "Enter email for SSH key: " ssh_email < /dev/tty
+                ssh-keygen -t ed25519 -C "$ssh_email" -f "$HOME/.ssh/id_ed25519"
+                success "SSH key generated"
+                info "Public key:"
+                cat "$HOME/.ssh/id_ed25519.pub"
+            fi
+        else
+            info "No TTY — skipping SSH key generation. Run \`ssh-keygen -t ed25519\` manually."
         fi
     else
         info "SSH key already exists"
@@ -267,29 +287,40 @@ setup_ssh() {
 #-------------------------------------------------------------------------------
 setup_python() {
     info "Setting up Python environment..."
-    
-    # Ensure pip is up to date
-    python3 -m pip install --upgrade pip --break-system-packages 2>/dev/null || \
-    python3 -m pip install --upgrade pip
-    
-    # Common Python packages
-    local pip_packages=(
-        pipx
-        virtualenv
+
+    # Modern Debian/Ubuntu (PEP 668) refuses system-wide pip installs without
+    # --break-system-packages, which is exactly what the flag name warns against.
+    # Right pattern: install pipx via the system package manager, then use pipx
+    # to install user-level CLI tools in isolated venvs.
+    case "$OS_ID" in
+        ubuntu|debian|raspbian)
+            sudo apt install -y pipx 2>&1 | tee -a "$LOG_FILE"
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            sudo dnf install -y pipx 2>&1 | tee -a "$LOG_FILE"
+            ;;
+        arch|manjaro)
+            sudo pacman -S --noconfirm python-pipx 2>&1 | tee -a "$LOG_FILE"
+            ;;
+        *)
+            warn "Unknown package manager; install pipx manually."
+            return
+            ;;
+    esac
+
+    # CLI tools — each gets its own venv via pipx (no system breakage).
+    local pipx_packages=(
         ipython
-        requests
-        pyyaml
-        python-dotenv
+        virtualenv
     )
-    
-    for pkg in "${pip_packages[@]}"; do
-        python3 -m pip install "$pkg" --break-system-packages 2>/dev/null || \
-        python3 -m pip install "$pkg" --user
+    for pkg in "${pipx_packages[@]}"; do
+        pipx install "$pkg" 2>&1 | tee -a "$LOG_FILE" || true
     done
-    
-    # Ensure pipx path
-    python3 -m pipx ensurepath 2>/dev/null || true
-    
+
+    # Libraries (requests, pyyaml, python-dotenv) belong inside project venvs,
+    # not the system Python. Install them per-project with `pip install`.
+    pipx ensurepath 2>/dev/null || true
+
     success "Python environment configured"
 }
 
@@ -355,11 +386,18 @@ main() {
     echo "  - Vim configuration"
     echo ""
     
-    read -p "Continue? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        info "Aborted."
-        exit 0
+    # Read from /dev/tty so prompts work even when stdin is otherwise occupied
+    # (e.g., if someone tries `curl | bash`, which is documented as unsupported
+    # but this still degrades gracefully).
+    if [ -t 0 ] || [ -r /dev/tty ]; then
+        read -p "Continue? (y/n): " -n 1 -r REPLY < /dev/tty
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            info "Aborted."
+            exit 0
+        fi
+    else
+        warn "No TTY available — running non-interactively, assuming yes."
     fi
     
     echo ""

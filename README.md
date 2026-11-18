@@ -26,6 +26,9 @@ A collection of utility scripts for various system administration and automation
 | File Retention (Age Off) | A config-driven bash script for age-based file cleanup across multiple directories. Each directory can have its own retention policy, glob pattern, and recursion setting — all managed from a single config file without touching the script itself | [README](./File_retention/README.md) |
 | Dir Sync | A lightweight Python script that compares two directories and copies only the changed or new files (deltas) from source to destination. No external dependencies — stdlib only | [README](./dirsync/README.md) |
 | VSCode-Extension-Install | Standardized VS Code extension setup for dev team. Run one script and your editor matches the rest of the team's tooling. | [README](./VSCode-Extension-Install/README.md) |
+| Meeting Notes Template Gen | Generates meeting note templates in your preferred format | [README](./meeting-notes-template-gen/README.md) |
+| Pop-Up Reminder | Windows popup reminding you to take a break every 45 minutes | [README](./pop-up-reminder/README.md) |
+| Misc Single Scripts | One-off scripts (file organizer, weather lookup; weather needs `OPENWEATHER_API_KEY`) | [README](./misc-single-scripts/README.md) |
 ## Quick Start
 
 Each script lives in its own directory with dedicated documentation. Click the README link above for usage instructions.

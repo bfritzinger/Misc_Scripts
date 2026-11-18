@@ -26,12 +26,14 @@ alias ltr='ls -alFhtr'         # Sort by time, reversed
 #-------------------------------------------------------------------------------
 # Safety Nets
 #-------------------------------------------------------------------------------
-alias rm='rm -i'
+# `rm -I` prompts once for 3+ files or recursive deletes — less annoying than
+# `-i` (which prompts per file) but still catches `rm -rf *` accidents.
+alias rm='rm -I --preserve-root'
 alias cp='cp -i'
 alias mv='mv -i'
 alias ln='ln -i'
 
-# Prevent accidental overwrites
+# `-p` (no-error on existing) and `-v` (verbose) for visibility.
 alias mkdir='mkdir -pv'
 
 #-------------------------------------------------------------------------------
@@ -47,11 +49,15 @@ alias egrep='egrep --color=auto'
 alias df='df -h'
 alias du='du -h'
 alias free='free -h'
-alias top='htop'
-alias ports='netstat -tulanp'
+# `top` left alone on purpose — silently rebinding it surprises you a year
+# later. Type `htop` directly when you want it.
 alias meminfo='free -h -l -t'
 alias cpuinfo='lscpu'
 alias diskinfo='lsblk -f'
+# `ss` replaces deprecated `netstat`; same flag semantics for these cases.
+alias ports='ss -tulpn'
+alias listening='ss -tlnp | grep LISTEN'
+alias connections='ss -tan state established'
 
 # Systemd
 alias sc='sudo systemctl'
@@ -175,8 +181,10 @@ alias gst='git stash'
 alias gstp='git stash pop'
 alias gstl='git stash list'
 alias grh='git reset HEAD'
-alias grhh='git reset HEAD --hard'
-alias gclean='git clean -fd'
+# `grhh` and `gclean` discard uncommitted work irreversibly. No shortcut on
+# purpose — type them in full so the muscle memory doesn't trip you.
+# alias grhh='git reset HEAD --hard'
+# alias gclean='git clean -fd'
 
 #-------------------------------------------------------------------------------
 # Python
@@ -184,7 +192,8 @@ alias gclean='git clean -fd'
 alias py='python3'
 alias pip='python3 -m pip'
 alias venv='python3 -m venv'
-alias activate='source venv/bin/activate'
+# Try `.venv/` first (modern convention), fall back to `venv/`.
+alias activate='source .venv/bin/activate 2>/dev/null || source venv/bin/activate'
 alias pipreq='pip freeze > requirements.txt'
 alias pipinstall='pip install -r requirements.txt'
 
@@ -197,8 +206,7 @@ alias myip='curl -s ifconfig.me && echo'
 # shellcheck disable=SC2142  # $1 is awk's, not a shell positional
 alias localip="hostname -I | awk '{print \$1}'"
 alias ips="ip -c a"
-alias listening='netstat -tlnp'
-alias connections='netstat -an | grep ESTABLISHED'
+# `listening` and `connections` moved to the System section (using `ss`).
 
 #-------------------------------------------------------------------------------
 # SSH
@@ -239,13 +247,15 @@ alias duf='du -sh * | sort -hr'
 
 # Update system (Debian/Ubuntu)
 alias update='sudo apt update && sudo apt upgrade -y'
-alias autoremove='sudo apt autoremove -y'
+# `autoremove` left interactive — `-y` has silently removed wanted packages
+# (kernel images, etc.). Run `sudo apt autoremove` and review the list.
+alias autoremove='sudo apt autoremove'
 
 # Watch with 1 second interval
 alias watch='watch -n 1'
 
-# Make with parallel jobs
-alias make='make -j$(nproc)'
+# `make='make -j$(nproc)'` removed: many Makefiles have race conditions and
+# silently break under parallel build. Pass `-j$(nproc)` explicitly when safe.
 
 # Clipboard (requires xclip)
 alias pbcopy='xclip -selection clipboard'

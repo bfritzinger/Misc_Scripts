@@ -13,10 +13,14 @@ esac
 # History Configuration
 #-------------------------------------------------------------------------------
 HISTCONTROL=ignoreboth:erasedups
-HISTSIZE=10000
-HISTFILESIZE=20000
-HISTTIMEFORMAT="%F %T "
+HISTSIZE=100000
+HISTFILESIZE=200000
+HISTTIMEFORMAT="%F %T  "
+HISTIGNORE='ls:ll:la:cd:pwd:exit:clear:c:q:h:bg:fg:history'
 shopt -s histappend
+# Share history across concurrent shells: append after each command, then
+# pull in entries written by other shells. Preserves any existing PROMPT_COMMAND.
+PROMPT_COMMAND="history -a; history -n;${PROMPT_COMMAND:+ $PROMPT_COMMAND}"
 
 #-------------------------------------------------------------------------------
 # Shell Options
@@ -26,6 +30,9 @@ shopt -s globstar       # ** matches all files and directories recursively
 shopt -s cdspell        # Autocorrect typos in cd
 shopt -s dirspell       # Autocorrect directory names
 shopt -s autocd         # Type directory name to cd into it
+shopt -s cmdhist        # Save multi-line commands as one history entry
+shopt -s checkjobs      # Warn about running jobs on exit
+shopt -s nocaseglob 2>/dev/null  # Case-insensitive globs (bash >=4)
 
 #-------------------------------------------------------------------------------
 # Environment Variables
@@ -35,25 +42,35 @@ export VISUAL=vim
 export PAGER=less
 export LESS='-R -F -X'
 
-# Local bin paths
-export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+# PATH additions, idempotent (re-sourcing won't duplicate entries).
+_path_prepend() {
+    [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]] && PATH="$1:$PATH"
+}
+_path_append() {
+    [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]] && PATH="$PATH:$1"
+}
+
+_path_prepend "$HOME/.local/bin"
+_path_prepend "$HOME/bin"
 
 # Go
 if [ -d "/usr/local/go" ]; then
     export GOPATH="$HOME/go"
-    export PATH="$PATH:/usr/local/go/bin:$GOPATH/bin"
+    _path_append "/usr/local/go/bin"
+    _path_append "$GOPATH/bin"
 fi
 
 # Rust
-if [ -f "$HOME/.cargo/env" ]; then
-    source "$HOME/.cargo/env"
-fi
+[ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
-# Kubernetes
-export KUBECONFIG="$HOME/.kube/config"
+# Kubernetes — $HOME/.kube/config is already kubectl's default. Only override
+# here if you want multiple configs merged, e.g.:
+#   export KUBECONFIG="$HOME/.kube/config:$HOME/.kube/work-config"
 
-# Python
+# Python: don't write .pyc files (keeps source trees tidy).
 export PYTHONDONTWRITEBYTECODE=1
+
+unset -f _path_prepend _path_append
 
 #-------------------------------------------------------------------------------
 # Prompt Configuration
@@ -69,18 +86,23 @@ WHITE='\[\033[0;37m\]'
 BOLD='\[\033[1m\]'
 RESET='\[\033[0m\]'
 
-# Git branch in prompt
+# Git branch in prompt. Uses symbolic-ref (fast, no fork to sed) and falls
+# back to a short SHA when in detached HEAD. Stays silent outside a repo.
 parse_git_branch() {
-    git branch 2>/dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/'
+    local b
+    b=$(git symbolic-ref --short HEAD 2>/dev/null) || \
+        b=$(git rev-parse --short HEAD 2>/dev/null) || return
+    printf ' (%s)' "$b"
 }
 
-# Kubernetes context in prompt (optional - can be slow)
-parse_kube_context() {
-    if command -v kubectl &>/dev/null && [ -f "$KUBECONFIG" ]; then
-        local ctx=$(kubectl config current-context 2>/dev/null)
-        [ -n "$ctx" ] && echo " [k8s:${ctx}]"
-    fi
-}
+# Optional kube context in prompt — disabled by default (forks kubectl on every
+# prompt redraw, which is noticeable). Add $(parse_kube_context) to PS1 below
+# if you want it.
+# parse_kube_context() {
+#     command -v kubectl &>/dev/null || return
+#     local ctx; ctx=$(kubectl config current-context 2>/dev/null) || return
+#     printf ' [k8s:%s]' "$ctx"
+# }
 
 # Set prompt based on user
 if [ "$EUID" -eq 0 ]; then
@@ -178,11 +200,8 @@ psgrep() {
     ps aux | grep -v grep | grep -i "$1"
 }
 
-# Get public IP
-myip() {
-    curl -s ifconfig.me
-    echo ""
-}
+# `myip` lives in .bash_aliases (as an alias) — defining it here as a function
+# was unreachable since aliases win over functions on lookup.
 
 # Quick HTTP server
 serve() {

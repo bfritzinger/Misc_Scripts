@@ -60,12 +60,21 @@
 
 [rebase]
     autoStash = true
+    # Git >= 2.38: automatically update dependent branches when their base
+    # branch is rebased. Big quality-of-life win for stacked PRs.
+    updateRefs = true
+
+[branch]
+    # Show most-recently-committed branches first in `git branch`.
+    sort = -committerdate
 
 [rerere]
     enabled = true
 
 [help]
-    autocorrect = 10
+    # `prompt` asks before running the auto-corrected command; the previous
+    # value (`10`) ran it silently after 1 second — easy to fire by accident.
+    autocorrect = prompt
 
 [credential]
     helper = cache --timeout=3600
@@ -146,9 +155,10 @@
     undo = reset --soft HEAD~1
     discard = checkout --
 
-    # Clean
+    # Clean — irreversible. `pristine` wipes ignored files too (incl. .env,
+    # node_modules, build artifacts). Type it in full when you really want it.
     clean-all = clean -fdx
-    pristine = !git reset --hard && git clean -fdx
+    # pristine = !git reset --hard && git clean -fdx
 
     # Remote
     rv = remote -v
@@ -170,8 +180,8 @@
     wip = !git add -A && git commit -m 'WIP'
     unwip = reset HEAD~1
 
-    # What changed today
-    today = log --since=midnight --author='Your Name' --oneline
+    # What changed today (uses your configured user.name automatically).
+    today = "!git log --since=midnight --author=\"$(git config user.name)\" --oneline"
 
     # Find commits
     find-commit = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short --grep=$1; }; f"
