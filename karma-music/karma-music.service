@@ -1,0 +1,22 @@
+[Unit]
+Description=Karma Music Auto-Player
+After=network-online.target mpd.service sound.target
+Wants=network-online.target mpd.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/karma-music.sh
+ExecStop=/usr/bin/mpc stop
+Restart=on-failure
+RestartSec=30
+User=brian
+Group=audio
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=karma-music
+
+[Install]
+WantedBy=multi-user.target
