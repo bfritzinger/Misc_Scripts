@@ -29,6 +29,9 @@ A collection of utility scripts for various system administration and automation
 | Meeting Notes Template Gen | Generates meeting note templates in your preferred format | [README](./meeting-notes-template-gen/README.md) |
 | Pop-Up Reminder | Windows popup reminding you to take a break every 45 minutes | [README](./pop-up-reminder/README.md) |
 | Misc Single Scripts | One-off scripts (file organizer, weather lookup; weather needs `OPENWEATHER_API_KEY`) | [README](./misc-single-scripts/README.md) |
+| Karma Music | Headless auto-playing music station (mpd + systemd): SomaFM streams with NAS fallback and auto-recovery | [README](./karma-music/README.md) |
+| fapolicyd Trust | Build and maintain a fapolicyd trust list from what is actually running, so the RHEL STIG fapolicyd control can be enforced safely | [README](./fapolicyd-trust/README.md) |
+| Run Playbooks | Run several Ansible playbooks from any directories against one shared inventory, with check/diff/tags/limit passthrough | [README](./run-playbooks/README.md) |
 ## Quick Start
 
 Each script lives in its own directory with dedicated documentation. Click the README link above for usage instructions.
